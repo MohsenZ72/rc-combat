@@ -16,7 +16,7 @@ const schema = z.object({
   JWT_AUDIENCE: z.string().default("rc-combat"),
   CLIENT_ORIGINS: z.string().default("http://localhost:5173"),
   TICK_RATE: z.coerce.number().int().min(10).max(60).default(30),
-  SNAPSHOT_DIVISOR: z.coerce.number().int().min(1).max(6).default(2),
+  SNAPSHOT_DIVISOR: z.coerce.number().int().min(1).max(6).default(1),
   MIN_PLAYERS: z.coerce.number().int().min(1).max(10).default(2),
   MAX_PLAYERS: z.coerce.number().int().min(1).max(10).default(10),
   LOBBY_WAIT_SECONDS: z.coerce.number().int().min(1).max(300).default(20),

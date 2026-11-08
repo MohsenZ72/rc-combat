@@ -1,5 +1,6 @@
 import {
   BTN,
+  BTN_MASK,
   CAR_FLAG,
   ItemKind,
   Phase,
@@ -62,6 +63,10 @@ export interface SimulationOptions {
 }
 
 const MAX_PROJECTILES = 96;
+/** Height above which bolts and rockets pass under a car. */
+const SHOT_HEIGHT = 0.6;
+/** Height above which a car does not set off a mine. */
+const MINE_TRIGGER_HEIGHT = 0.3;
 const ROCKET_TARGET_RANGE = 220;
 const ITEM_WEIGHTS_FRONT = [10, 35, 25, 10, 0, 20];
 const ITEM_WEIGHTS_BACK = [30, 5, 5, 30, 20, 10];
@@ -113,7 +118,7 @@ export class RaceSimulation {
       car.segmentHint = opts.track.project(pose.x, pose.y).segment;
       this.cars.push(car);
       this.suspicion.push(new SuspicionTracker(opts.config.antiCheat, this.tickRate));
-      this.prev.push({ x: car.x, y: car.y, heading: car.heading, vx: 0, vy: 0 });
+      this.prev.push({ x: car.x, y: car.y, heading: car.heading, vx: 0, vy: 0, z: 0, vz: 0 });
       this.physics.addCar(slot, car.x, car.y);
     }
     this.boxes = opts.track.boxes.map((b) => ({ x: b.x, y: b.y, respawnTick: 0 }));
@@ -125,6 +130,11 @@ export class RaceSimulation {
 
   get raceTick(): number {
     return this.tick - this.raceStartTick;
+  }
+
+  /** Active projectiles, for bots that dodge by jumping. */
+  activeProjectiles(): Projectile[] {
+    return this.projectiles.filter((p) => p.active);
   }
 
   /** Events produced since the last call. */
@@ -187,10 +197,12 @@ export class RaceSimulation {
       if (car.forfeited) continue;
       car.impulseThisTick = false;
       car.respawnedThisTick = false;
-      const buttons = car.disconnected ? 0 : (inputs[car.slot] ?? 0) & 0x7f;
+      const buttons = car.disconnected ? 0 : (inputs[car.slot] ?? 0) & BTN_MASK;
       this.tickTimers(car);
       this.handleActions(car, buttons);
-      integrateMovement(car, buttons, dt, this.config);
+      if (integrateMovement(car, buttons, dt, this.config, car.lastButtons)) {
+        this.emit({ type: "jump", tick: this.tick, slot: car.slot });
+      }
       car.lastButtons = buttons;
     }
 
@@ -367,6 +379,8 @@ export class RaceSimulation {
       for (let j = i + 1; j < cars.length; j++) {
         const b = cars[j]!;
         if (!this.collidable(b)) continue;
+        // A car high enough in the air passes over another one.
+        if (Math.abs(a.z - b.z) >= this.config.car.bodyHeight) continue;
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const d = Math.hypot(dx, dy);
@@ -424,6 +438,8 @@ export class RaceSimulation {
       car.heading = verdict.corrected.heading;
       car.vx = verdict.corrected.vx;
       car.vy = verdict.corrected.vy;
+      car.z = verdict.corrected.z ?? car.z;
+      car.vz = verdict.corrected.vz ?? car.vz;
       this.physics.setCarPosition(car.slot, car.x, car.y);
     }
     if (verdict.respawn) this.respawn(car);
@@ -452,6 +468,8 @@ export class RaceSimulation {
     p.heading = car.heading;
     p.vx = car.vx;
     p.vy = car.vy;
+    p.z = car.z;
+    p.vz = car.vz;
   }
 
   // ---------------------------------------------------------------- race
@@ -503,6 +521,8 @@ export class RaceSimulation {
     car.heading = pose.heading;
     car.vx = 0;
     car.vy = 0;
+    car.z = 0;
+    car.vz = 0;
     car.yawRate = 0;
     car.speedCap = this.config.car.maxSpeed;
     car.hp = this.config.car.maxHealth;
@@ -609,6 +629,8 @@ export class RaceSimulation {
     let bestD = Infinity;
     for (const car of this.cars) {
       if (!this.collidable(car)) continue;
+      // Shots fly at bumper height: a jumping car lets them pass underneath.
+      if (car.z > SHOT_HEIGHT) continue;
       if (car.slot === p.owner && (p.kind === ProjectileKind.Bolt || p.age < armTicks * 4)) continue;
       const d = pointSegmentDistSq(car.x, car.y, x0, y0, x1, y1);
       if (d <= reach * reach && d < bestD) {
@@ -626,6 +648,7 @@ export class RaceSimulation {
     const ownerImmune = p.age < secondsToTicks(1.5, this.tickRate);
     for (const car of this.cars) {
       if (!this.collidable(car)) continue;
+      if (car.z > MINE_TRIGGER_HEIGHT) continue;
       if (car.slot === p.owner && ownerImmune) continue;
       const dx = car.x - p.x;
       const dy = car.y - p.y;
@@ -726,6 +749,7 @@ export class RaceSimulation {
     if (car.itemLockTicks > 0) f |= CAR_FLAG.ITEM_LOCKED;
     if (car.forfeited) f |= CAR_FLAG.FORFEITED;
     if (car.spawnProtectTicks > 0) f |= CAR_FLAG.SPAWN_PROTECTED;
+    if (car.z > 0) f |= CAR_FLAG.AIRBORNE;
     return f;
   }
 
@@ -744,6 +768,8 @@ export class RaceSimulation {
           heading: c.heading,
           vx: c.vx,
           vy: c.vy,
+          z: c.z,
+          vz: c.vz,
           hp: c.hp,
           flags: this.carFlags(c),
           item: c.item,
@@ -755,6 +781,7 @@ export class RaceSimulation {
           stunTicks: c.stunTicks,
           empTicks: c.empTicks,
           shieldTicks: c.shieldTicks,
+          jumpCooldownTicks: c.jumpCooldownTicks,
         })),
       projectiles: this.projectiles
         .filter((p) => p.active)

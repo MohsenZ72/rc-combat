@@ -21,7 +21,7 @@ const anomalies: string[] = [];
 let worst = 0;
 const t0 = performance.now();
 while (sim.phase !== 3 && sim.tick < 40000) {
-  for (const b of bots) inputs[b.slot] = b.decide({ track, cars: sim.cars, tickRate: sim.tickRate });
+  for (const b of bots) inputs[b.slot] = b.decide({ track, cars: sim.cars, tickRate: sim.tickRate, projectiles: sim.activeProjectiles() });
   recorder.recordInputs(sim.tick + 1, inputs);
   const s = performance.now();
   sim.step(inputs);

@@ -12,6 +12,9 @@ export interface CarState {
   heading: number;
   vx: number;
   vy: number;
+  z: number;
+  vz: number;
+  jumpCooldownTicks: number;
   yawRate: number;
   /** Current legal speed ceiling; decays back to base after turbo/knockback. */
   speedCap: number;
@@ -61,6 +64,9 @@ export function createCar(slot: number, x: number, y: number, heading: number, m
     heading,
     vx: 0,
     vy: 0,
+    z: 0,
+    vz: 0,
+    jumpCooldownTicks: 0,
     yawRate: 0,
     speedCap: maxSpeed,
     drifting: false,

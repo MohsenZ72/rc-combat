@@ -12,6 +12,7 @@ export type GameEvent =
   | { type: "item_used"; tick: number; slot: number; item: ItemKind; target?: number }
   | { type: "item_rejected"; tick: number; slot: number; item: ItemKind; reason: ItemRejectReason }
   | { type: "fire"; tick: number; slot: number; ammoLeft: number }
+  | { type: "jump"; tick: number; slot: number }
   | { type: "hit"; tick: number; source: ProjectileSource; attacker: number; victim: number; damage: number; blocked: boolean }
   | { type: "wreck"; tick: number; slot: number; by: number | null }
   | { type: "respawn"; tick: number; slot: number }

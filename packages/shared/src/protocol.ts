@@ -40,9 +40,10 @@ export const BTN = {
   DRIFT: 1 << 4,
   USE_ITEM: 1 << 5,
   FIRE: 1 << 6,
+  JUMP: 1 << 7,
 } as const;
 
-export const BTN_MASK = 0x7f;
+export const BTN_MASK = 0xff;
 export const INPUT_PACKET_BYTES = 3;
 
 export enum ItemKind {
@@ -91,6 +92,7 @@ export const CAR_FLAG = {
   ITEM_LOCKED: 1 << 9,
   FORFEITED: 1 << 10,
   SPAWN_PROTECTED: 1 << 11,
+  AIRBORNE: 1 << 12,
 } as const;
 
 export interface InputPacket {
@@ -141,6 +143,9 @@ export interface CarSnapshot {
   heading: number;
   vx: number;
   vy: number;
+  /** Height above the floor (jumps). */
+  z: number;
+  vz: number;
   hp: number;
   flags: number;
   item: ItemKind;
@@ -152,6 +157,7 @@ export interface CarSnapshot {
   stunTicks: number;
   empTicks: number;
   shieldTicks: number;
+  jumpCooldownTicks: number;
 }
 
 export interface ProjectileSnapshot {
@@ -177,7 +183,7 @@ export interface Snapshot {
 }
 
 const HEADER_BYTES = 1 + 1 + 4 + 4 + 2 + 1 + 1 + 1;
-const CAR_BYTES = 1 + 4 * 5 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 4;
+const CAR_BYTES = 1 + 4 * 5 + 4 + 2 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 5;
 const PROJECTILE_BYTES = 2 + 1 + 1 + 4 * 3;
 
 const clampU8 = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
@@ -208,6 +214,8 @@ export function encodeSnapshot(s: Snapshot): Uint8Array {
     v.setFloat32(o, c.heading, true); o += 4;
     v.setFloat32(o, c.vx, true); o += 4;
     v.setFloat32(o, c.vy, true); o += 4;
+    v.setFloat32(o, c.z, true); o += 4;
+    v.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(c.vz * 100))), true); o += 2;
     v.setUint8(o, clampU8(c.hp)); o += 1;
     v.setUint16(o, c.flags, true); o += 2;
     v.setUint8(o, c.item); o += 1;
@@ -219,6 +227,7 @@ export function encodeSnapshot(s: Snapshot): Uint8Array {
     v.setUint8(o, clampU8(c.stunTicks)); o += 1;
     v.setUint8(o, clampU8(c.empTicks)); o += 1;
     v.setUint8(o, clampU8(c.shieldTicks)); o += 1;
+    v.setUint8(o, clampU8(c.jumpCooldownTicks)); o += 1;
   }
   for (const p of s.projectiles) {
     v.setUint16(o, p.id & 0xffff, true); o += 2;
@@ -261,6 +270,8 @@ export function decodeSnapshot(payload: unknown): DecodeResult<Snapshot> {
     const heading = v.getFloat32(o, true); o += 4;
     const vx = v.getFloat32(o, true); o += 4;
     const vy = v.getFloat32(o, true); o += 4;
+    const z = v.getFloat32(o, true); o += 4;
+    const vz = v.getInt16(o, true) / 100; o += 2;
     const hp = v.getUint8(o); o += 1;
     const flags = v.getUint16(o, true); o += 2;
     const item = v.getUint8(o) as ItemKind; o += 1;
@@ -272,7 +283,8 @@ export function decodeSnapshot(payload: unknown): DecodeResult<Snapshot> {
     const stunTicks = v.getUint8(o); o += 1;
     const empTicks = v.getUint8(o); o += 1;
     const shieldTicks = v.getUint8(o); o += 1;
-    cars.push({ slot, x, y, heading, vx, vy, hp, flags, item, ammo, lap, nextGate, rank, turboTicks, stunTicks, empTicks, shieldTicks });
+    const jumpCooldownTicks = v.getUint8(o); o += 1;
+    cars.push({ slot, x, y, heading, vx, vy, z, vz, hp, flags, item, ammo, lap, nextGate, rank, turboTicks, stunTicks, empTicks, shieldTicks, jumpCooldownTicks });
   }
   const projectiles: ProjectileSnapshot[] = [];
   for (let i = 0; i < projectileCount; i++) {

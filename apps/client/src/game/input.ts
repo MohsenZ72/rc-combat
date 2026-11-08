@@ -14,11 +14,13 @@ const KEYS: Record<string, number> = {
   ShiftRight: BTN.DRIFT,
   KeyE: BTN.USE_ITEM,
   Enter: BTN.USE_ITEM,
-  Space: BTN.FIRE,
+  KeyF: BTN.FIRE,
+  KeyJ: BTN.FIRE,
+  Space: BTN.JUMP,
 };
 
 /**
- * Turns keyboard + gamepad state into the 7-bit button mask the server
+ * Turns keyboard + gamepad state into the 8-bit button mask the server
  * accepts. This is the only thing the client ever tells the server about
  * driving.
  */
@@ -59,7 +61,7 @@ export class InputController {
     this.keys = down ? this.keys | bit : this.keys & ~bit;
   }
 
-  /** Standard mapping: RT/A accelerate, LT/B brake, stick steer, RB drift, X item, Y/LB fire. */
+  /** Standard mapping: RT accelerate, LT/B brake, stick steer, A jump, RB drift, X item, Y/LB fire. */
   private gamepad(): number {
     const pads = typeof navigator.getGamepads === "function" ? navigator.getGamepads() : [];
     let mask = 0;
@@ -67,7 +69,8 @@ export class InputController {
       if (!pad || pad.mapping !== "standard") continue;
       const b = (i: number) => pad.buttons[i]?.pressed ?? false;
       const axis = pad.axes[0] ?? 0;
-      if (b(7) || b(0)) mask |= BTN.ACCELERATE;
+      if (b(7)) mask |= BTN.ACCELERATE;
+      if (b(0)) mask |= BTN.JUMP;
       if (b(6) || b(1)) mask |= BTN.BRAKE;
       if (axis < -0.3 || b(14)) mask |= BTN.STEER_LEFT;
       if (axis > 0.3 || b(15)) mask |= BTN.STEER_RIGHT;

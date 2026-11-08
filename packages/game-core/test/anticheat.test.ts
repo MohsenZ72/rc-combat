@@ -154,11 +154,12 @@ describe("input layer", () => {
     cheater.dispose();
   });
 
-  it("rejects malformed packets and unknown button bits", () => {
+  it("rejects malformed packets", () => {
     const guard = new InputGuard(DEFAULT_CONFIG.net, 0);
     expect(guard.receive({ x: 1, y: 2 }, 1).accepted).toBe(false);
-    expect(guard.receive(new Uint8Array([1, 0, 0xff]), 2).accepted).toBe(false);
+    expect(guard.receive(new Uint8Array([1, 0]), 2).accepted).toBe(false);
     expect(guard.receive(new Uint8Array([1, 0, 1, 99, 99]), 3).accepted).toBe(false);
+    expect(guard.receive(JSON.stringify({ buttons: 1 }), 3).accepted).toBe(false);
     expect(guard.receive(encodeInput(1, BTN.ACCELERATE), 4).accepted).toBe(true);
   });
 

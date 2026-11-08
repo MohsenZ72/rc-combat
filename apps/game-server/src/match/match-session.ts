@@ -257,7 +257,7 @@ export class MatchSession {
     for (const seat of this.seats) {
       if (seat.gone) continue;
       if (seat.bot) {
-        seat.lastButtons = seat.bot.decide({ track: sim.track, cars: sim.cars, tickRate: sim.tickRate });
+        seat.lastButtons = seat.bot.decide({ track: sim.track, cars: sim.cars, tickRate: sim.tickRate, projectiles: sim.activeProjectiles() });
       } else if (seat.guard) {
         // One input per tick; if none arrived, the last one is held (TCP has no loss, only delay).
         const next = seat.connected ? seat.guard.take() : null;

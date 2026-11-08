@@ -45,6 +45,8 @@ export class RaceClient extends Emitter<ClientEvents> {
   private lastFrame = performance.now();
   private visualOffset = { x: 0, y: 0 };
   private tags = new Map<number, HTMLElement>();
+  /** Previous rendered heading per car, to derive yaw rate for steering/lean visuals. */
+  private headings = new Map<number, number>();
   private lastMapDraw = 0;
   private cameraSnapped = false;
   private readonly reportedErrors = new Set<string>();
@@ -165,6 +167,10 @@ export class RaceClient extends Emitter<ClientEvents> {
         }
       }
       this.updateHud(me, s);
+      // Other cars become obstacles for prediction, so bumps are felt immediately.
+      this.predictor.setObstacles(
+        s.cars.filter((c) => c.slot !== this.mySlot && (c.flags & (CAR_FLAG.FINISHED | CAR_FLAG.WRECKED)) === 0),
+      );
     }
     if (prevPhase !== s.phase && (s.phase === Phase.Countdown || s.phase === Phase.Racing)) this.startInput();
     if (s.phase === Phase.Racing && prevPhase !== Phase.Racing) this.emit("racing", undefined);
@@ -200,6 +206,8 @@ export class RaceClient extends Emitter<ClientEvents> {
           break;
         case "pickup":
           if (e.slot === this.mySlot) this.hud?.pushFeed(`Got ${ITEM_NAMES[e.item]}`, true);
+          break;
+        case "jump":
           break;
         case "item_rejected":
           if (e.reason === "no_target") this.hud?.pushFeed("No target in range", true);
@@ -286,18 +294,29 @@ export class RaceClient extends Emitter<ClientEvents> {
       const view = this.cars.ensure(c.slot, this.seats.get(c.slot)?.color ?? "#cccccc");
       let x = c.x;
       let y = c.y;
+      let z = c.z;
       let heading = c.heading;
-      let speed = Math.hypot(c.vx, c.vy);
+      let vx = c.vx;
+      let vy = c.vy;
       if (c.slot === this.mySlot && this.predictor?.ready) {
         const p = this.predictor.state;
         x = p.x + this.visualOffset.x;
         y = p.y + this.visualOffset.y;
+        z = p.z;
         heading = p.heading;
-        speed = Math.hypot(p.vx, p.vy);
-        this.world.follow(x, y, heading, speed, dt, !this.cameraSnapped);
+        vx = p.vx;
+        vy = p.vy;
+        this.world.follow(x, y, heading, Math.hypot(vx, vy), dt, !this.cameraSnapped);
         this.cameraSnapped = true;
       }
-      view.update(x, y, heading, speed, c.flags, dt, now);
+      const forwardSpeed = vx * Math.cos(heading) + vy * Math.sin(heading);
+      const prevHeading = this.headings.get(c.slot) ?? heading;
+      let dh = heading - prevHeading;
+      if (dh > Math.PI) dh -= Math.PI * 2;
+      if (dh < -Math.PI) dh += Math.PI * 2;
+      this.headings.set(c.slot, heading);
+      const yawRate = dt > 0 ? dh / dt : 0;
+      view.update(x, y, z, heading, forwardSpeed, yawRate, c.flags, dt, now);
       mapDots.push({ x, y, color: this.seats.get(c.slot)?.color ?? "#ccc", me: c.slot === this.mySlot });
       this.placeTag(c.slot, x, y);
     }

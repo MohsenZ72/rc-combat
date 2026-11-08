@@ -39,6 +39,32 @@ describe("simulation", () => {
     sim.dispose();
   });
 
+  it("cars collide: head-on cars bounce apart and never pass through each other", async () => {
+    const sim = await makeSim();
+    startRace(sim);
+    const pose = track.poseAt(60);
+    const fx = Math.cos(pose.heading);
+    const fy = Math.sin(pose.heading);
+    sim.placeCar(0, pose.x, pose.y, pose.heading);
+    sim.placeCar(1, pose.x + fx * 14, pose.y + fy * 14, pose.heading + Math.PI);
+    const minDist = sim.config.car.radius * 2;
+    let closest = Infinity;
+    let bumped = false;
+    for (let i = 0; i < 60; i++) {
+      sim.step([BTN.ACCELERATE, BTN.ACCELERATE]);
+      const [a, b] = sim.cars as [typeof sim.cars[0], typeof sim.cars[0]];
+      closest = Math.min(closest, Math.hypot(b.x - a.x, b.y - a.y));
+      bumped ||= sim.drainEvents().some((e) => e.type === "collision" && e.other !== "wall");
+    }
+    expect(bumped).toBe(true);
+    expect(closest).toBeGreaterThan(minDist - 0.35);
+    // Still on their own sides: nobody tunnelled through.
+    const a = sim.cars[0]!;
+    const b = sim.cars[1]!;
+    expect((b.x - a.x) * fx + (b.y - a.y) * fy).toBeGreaterThan(0);
+    sim.dispose();
+  });
+
   it("disconnected cars receive neutral input", async () => {
     const sim = await makeSim();
     startRace(sim);

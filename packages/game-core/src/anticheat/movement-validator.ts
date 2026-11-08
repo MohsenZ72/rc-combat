@@ -1,7 +1,7 @@
 import type { AnomalyKind, GameConfig } from "@rc/shared";
 import { angleDelta, isFiniteNumber } from "../math.js";
 import type { Track } from "../track.js";
-import { absoluteSpeedCeiling, movementLimits, OVERSPEED_DECAY } from "../vehicle.js";
+import { absoluteSpeedCeiling, maxJumpHeight, movementLimits, OVERSPEED_DECAY } from "../vehicle.js";
 
 export interface KinematicSample {
   x: number;
@@ -9,6 +9,9 @@ export interface KinematicSample {
   heading: number;
   vx: number;
   vy: number;
+  /** Height and vertical speed; omitted means on the floor. */
+  z?: number;
+  vz?: number;
 }
 
 export interface MovementContext {
@@ -53,7 +56,7 @@ export function validateMovement(prev: KinematicSample, next: KinematicSample, c
   const { config, dt } = ctx;
   const ac = config.antiCheat;
 
-  const values = [next.x, next.y, next.heading, next.vx, next.vy];
+  const values = [next.x, next.y, next.heading, next.vx, next.vy, next.z ?? 0, next.vz ?? 0];
   if (!values.every(isFiniteNumber)) {
     return { violations: [{ kind: "invalid_state", detail: "non-finite kinematics" }], corrected: null, respawn: true };
   }
@@ -118,6 +121,23 @@ export function validateMovement(prev: KinematicSample, next: KinematicSample, c
     const c = fix();
     c.x = prev.x;
     c.y = prev.y;
+  }
+
+  // Jumps: bounded height and take-off speed, and no extra lift once airborne (no double jump / fly hack).
+  const pz = prev.z ?? 0;
+  const pvz = prev.vz ?? 0;
+  const nz = next.z ?? 0;
+  const nvz = next.vz ?? 0;
+  const ceilingZ = maxJumpHeight(config) * (1 + ac.speedTolerance) + 0.05;
+  const takeoffSpeed = config.car.jumpVelocity * (1 + ac.speedTolerance);
+  if (nz < -1e-6 || nz > ceilingZ || nvz > takeoffSpeed) {
+    violations.push({ kind: "jump", detail: `z ${nz.toFixed(2)} vz ${nvz.toFixed(2)}` });
+    const c = fix();
+    c.z = Math.max(0, Math.min(nz, ceilingZ));
+    c.vz = Math.min(nvz, 0);
+  } else if (pz > 0 && nz > 0 && nvz > pvz + 1e-6) {
+    violations.push({ kind: "jump", detail: `lift while airborne: vz ${pvz.toFixed(2)} → ${nvz.toFixed(2)}` });
+    fix().vz = pvz - config.car.gravity * dt;
   }
 
   // Bounds: the walls are at ±halfWidth; the car centre can get within its radius.

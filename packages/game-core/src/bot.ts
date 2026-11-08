@@ -9,6 +9,8 @@ export interface BotView {
   track: Track;
   cars: readonly CarState[];
   tickRate: number;
+  /** Optional: incoming shots and mines the bot may jump over. */
+  projectiles?: readonly { x: number; y: number; kind: number; owner: number }[];
 }
 
 /**
@@ -76,7 +78,26 @@ export class BotDriver {
     if (bend > 0.6 && speed > 18 && Math.abs(diff) > 0.25 && this.skill > 0.5) buttons |= BTN.DRIFT;
 
     buttons |= this.combat(view, car, speed, bend);
+    if (this.shouldJump(view, car)) buttons |= BTN.JUMP;
     return buttons;
+  }
+
+  /** Hop over a nearby rocket, bolt or a mine on our line; skilled bots react more often. */
+  private shouldJump(view: BotView, car: CarState): boolean {
+    if (!view.projectiles || car.z > 0 || car.jumpCooldownTicks > 0) return false;
+    if ((car.lastButtons & BTN.JUMP) !== 0) return false;
+    const fx = Math.cos(car.heading);
+    const fy = Math.sin(car.heading);
+    for (const p of view.projectiles) {
+      if (p.owner === car.slot) continue;
+      const dx = p.x - car.x;
+      const dy = p.y - car.y;
+      const d = Math.hypot(dx, dy);
+      const isMine = p.kind === 3;
+      const ahead = (dx * fx + dy * fy) / (d || 1);
+      if ((isMine && d < 7 && ahead > 0.9) || (!isMine && d < 9)) return this.rng.next() < 0.35 * this.skill;
+    }
+    return false;
   }
 
   private combat(view: BotView, car: CarState, speed: number, bend: number): number {

@@ -14,6 +14,10 @@ export interface MovementState {
   empTicks: number;
   wreckTicks: number;
   finished: boolean;
+  /** Height above the floor and vertical speed (jumps). */
+  z: number;
+  vz: number;
+  jumpCooldownTicks: number;
 }
 
 export interface MovementLimits {
@@ -43,21 +47,45 @@ export function movementLimits(car: Pick<MovementState, "turboTicks" | "drifting
   };
 }
 
+export function isAirborne(car: { z: number }): boolean {
+  return car.z > 0;
+}
+
+/** Highest point a legal jump can reach. */
+export function maxJumpHeight(config: GameConfig): number {
+  return (config.car.jumpVelocity * config.car.jumpVelocity) / (2 * config.car.gravity);
+}
+
 /** Absolute speed no car may ever exceed, including turbo and knockback. */
 export function absoluteSpeedCeiling(config: GameConfig): number {
   return config.car.maxSpeed * config.items.turbo.speedMultiplier * 1.35;
 }
 
 /**
- * Arcade RC-car integrator. Deterministic, allocation-free. Updates velocity
- * and heading only; position is resolved by the physics world (walls).
+ * Arcade RC-car integrator. Deterministic, allocation-free. Updates velocity,
+ * heading and the vertical jump arc; horizontal position is resolved by the
+ * physics world (walls). Returns true on the tick the car takes off.
+ *
+ * `prevButtons` makes jumping edge-triggered: holding the key does not
+ * bunny-hop. Take-off needs the car on the floor and the cooldown expired.
  */
-export function integrateMovement(car: MovementState, buttons: number, dt: number, config: GameConfig): void {
+export function integrateMovement(car: MovementState, buttons: number, dt: number, config: GameConfig, prevButtons = 0): boolean {
   const c = config.car;
   const controlsLocked = car.stunTicks > 0 || car.wreckTicks > 0;
   const autopilot = car.finished;
-  const throttleBtn = !controlsLocked && !autopilot && (buttons & BTN.ACCELERATE) !== 0;
-  const brakeBtn = !controlsLocked && !autopilot && (buttons & BTN.BRAKE) !== 0;
+  const airborne = car.z > 0;
+  let tookOff = false;
+  if (car.jumpCooldownTicks > 0) car.jumpCooldownTicks--;
+  const jumpPressed = (buttons & BTN.JUMP) !== 0 && (prevButtons & BTN.JUMP) === 0;
+  if (jumpPressed && !airborne && !controlsLocked && !autopilot && car.jumpCooldownTicks === 0) {
+    car.vz = c.jumpVelocity;
+    car.jumpCooldownTicks = Math.max(1, Math.round(c.jumpCooldown / dt));
+    tookOff = true;
+  }
+  // Wheels need the floor: no throttle or brake while airborne, momentum carries.
+  const grounded = !airborne && !tookOff;
+  const throttleBtn = grounded && !controlsLocked && !autopilot && (buttons & BTN.ACCELERATE) !== 0;
+  const brakeBtn = grounded && !controlsLocked && !autopilot && (buttons & BTN.BRAKE) !== 0;
   const steer = controlsLocked || autopilot ? 0 : ((buttons & BTN.STEER_LEFT) !== 0 ? 1 : 0) - ((buttons & BTN.STEER_RIGHT) !== 0 ? 1 : 0);
 
   let fx = Math.cos(car.heading);
@@ -65,7 +93,7 @@ export function integrateMovement(car: MovementState, buttons: number, dt: numbe
   let vF = car.vx * fx + car.vy * fy;
   let vL = car.vx * -fy + car.vy * fx;
 
-  car.drifting = !controlsLocked && (buttons & BTN.DRIFT) !== 0 && steer !== 0 && vF > 8;
+  car.drifting = grounded && !controlsLocked && (buttons & BTN.DRIFT) !== 0 && steer !== 0 && vF > 8;
   const limits = movementLimits(car, config);
   const empActive = car.empTicks > 0;
   const throttleCap = empActive ? config.items.emp.throttleCap : 1;
@@ -80,7 +108,7 @@ export function integrateMovement(car: MovementState, buttons: number, dt: numbe
   } else if (brakeBtn) {
     if (vF > 0.5) vF = Math.max(0, vF - c.brakeDeceleration * dt);
     else vF = Math.max(-c.maxReverseSpeed, vF - c.reverseAcceleration * dt);
-  } else {
+  } else if (grounded) {
     const decel = (controlsLocked ? 2.2 : 1) * c.coastDeceleration * dt;
     vF = vF > 0 ? Math.max(0, vF - decel) : Math.min(0, vF + decel);
   }
@@ -92,7 +120,8 @@ export function integrateMovement(car: MovementState, buttons: number, dt: numbe
   const absF = Math.abs(vF);
   const speedFactor = clamp(absF / c.fullSteerSpeed, 0, 1) * (1 - c.highSpeedSteerLoss * clamp(absF / c.maxSpeed, 0, 1));
   const yawTarget =
-    steer * c.maxYawRate * speedFactor * (car.drifting ? c.driftYawMultiplier : 1) * (empActive ? config.items.emp.steerScale : 1) * (vF < 0 ? -1 : 1);
+    steer * c.maxYawRate * speedFactor * (car.drifting ? c.driftYawMultiplier : 1) * (empActive ? config.items.emp.steerScale : 1) * (vF < 0 ? -1 : 1) *
+    (grounded ? 1 : c.airSteer);
   const maxYawStep = YAW_ACCELERATION * dt;
   car.yawRate += clamp(yawTarget - car.yawRate, -maxYawStep, maxYawStep);
   car.yawRate = clamp(car.yawRate, -limits.maxYawRate, limits.maxYawRate);
@@ -110,7 +139,8 @@ export function integrateMovement(car: MovementState, buttons: number, dt: numbe
   fy = Math.sin(car.heading);
   vF = vx * fx + vy * fy;
   vL = vx * -fy + vy * fx;
-  vL *= Math.exp(-(car.drifting ? c.driftGrip : c.grip) * dt);
+  // In the air the tyres do not grip, so the car keeps sliding along its old line.
+  if (grounded) vL *= Math.exp(-(car.drifting ? c.driftGrip : c.grip) * dt);
   vx = fx * vF - fy * vL;
   vy = fy * vF + fx * vL;
 
@@ -124,6 +154,20 @@ export function integrateMovement(car: MovementState, buttons: number, dt: numbe
   }
   car.vx = vx;
   car.vy = vy;
+
+  // Vertical arc. Landing costs a little speed.
+  if (car.z > 0 || car.vz > 0) {
+    // Velocity first, then position (semi-implicit Euler): the apex never exceeds v²/2g.
+    car.vz -= c.gravity * dt;
+    car.z += car.vz * dt;
+    if (car.z <= 0) {
+      car.z = 0;
+      car.vz = 0;
+      car.vx *= c.landingSpeedKeep;
+      car.vy *= c.landingSpeedKeep;
+    }
+  }
+  return tookOff;
 }
 
 /**

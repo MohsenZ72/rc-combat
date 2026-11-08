@@ -1,79 +1,137 @@
-import { Color3, Mesh, MeshBuilder, TransformNode, type Scene, type StandardMaterial } from "@babylonjs/core";
+import { Color3, MeshBuilder, TransformNode, type Mesh, type Scene, type StandardMaterial } from "@babylonjs/core";
 import { CAR_FLAG } from "@rc/shared";
 import { mat, toWorld, type World } from "./world.js";
 
-/** One RC buggy: chassis, shell, wheels, wing, whip antenna + effect shells. */
+const WHEEL_RADIUS = 0.45;
+const MAX_STEER_VISUAL = 0.45;
+
+interface Wheel {
+  /** Steering pivot (front wheels turn left/right around Y). */
+  pivot: TransformNode;
+  /** Spinning tyre: rolls around its axle (local Z). */
+  tyre: Mesh;
+  front: boolean;
+}
+
+/**
+ * One RC buggy. Hierarchy:
+ *   root (position, yaw)
+ *   ├─ body (roll/pitch from cornering, braking and landing)
+ *   │   └─ chassis, shell, nose, wing, antenna…
+ *   └─ wheel pivots (steer) → tyre (spin around the axle) → rim spokes
+ * Wheels stay on the ground while the body leans, like a real RC car.
+ */
 class CarView {
   readonly root: TransformNode;
+  private readonly body: TransformNode;
   private readonly shellMat: StandardMaterial;
   private readonly baseColor: Color3;
-  private readonly wheels: Mesh[] = [];
+  private readonly wheels: Wheel[] = [];
   private readonly shield: Mesh;
   private readonly flame: Mesh;
-  private wheelSpin = 0;
+  private spin = 0;
+  private steer = 0;
+  private roll = 0;
+  private pitch = 0;
+  private lastSpeed = 0;
   private flashUntil = 0;
 
   constructor(world: World, readonly slot: number, color: string) {
     const scene = world.scene;
     this.root = new TransformNode(`car${slot}`, scene);
+    this.body = new TransformNode(`body${slot}`, scene);
+    this.body.parent = this.root;
     this.baseColor = Color3.FromHexString(color);
     this.shellMat = mat(scene, `shell${slot}`, color, { specular: 0.6 });
     const dark = mat(scene, `chassis${slot}`, "#15181d", { specular: 0.2 });
-    const tyre = mat(scene, `tyre${slot}`, "#0b0c0e", { specular: 0.05 });
+    const tyreMat = mat(scene, `tyre${slot}`, "#0b0c0e", { specular: 0.05 });
+    const rimMat = mat(scene, `rim${slot}`, "#c9d0db", { specular: 0.7 });
 
-    const chassis = MeshBuilder.CreateBox("chassis", { width: 2.6, height: 0.35, depth: 1.5 }, scene);
-    chassis.material = dark;
-    chassis.position.y = 0.45;
-    const shell = MeshBuilder.CreateBox("shell", { width: 1.7, height: 0.55, depth: 1.25 }, scene);
-    shell.material = this.shellMat;
-    shell.position.set(-0.05, 0.85, 0);
-    const nose = MeshBuilder.CreateBox("nose", { width: 0.7, height: 0.3, depth: 1.1 }, scene);
-    nose.material = this.shellMat;
-    nose.position.set(1.05, 0.65, 0);
-    const wing = MeshBuilder.CreateBox("wing", { width: 0.4, height: 0.08, depth: 1.6 }, scene);
-    wing.material = this.shellMat;
-    wing.position.set(-1.25, 1.35, 0);
-    const strut = MeshBuilder.CreateBox("strut", { width: 0.1, height: 0.5, depth: 0.1 }, scene);
-    strut.material = dark;
-    strut.position.set(-1.2, 1.1, 0);
-    const antenna = MeshBuilder.CreateCylinder("antenna", { diameter: 0.05, height: 1.6, tessellation: 4 }, scene);
-    antenna.material = dark;
-    antenna.position.set(-0.6, 1.7, -0.45);
-    const tip = MeshBuilder.CreateSphere("tip", { diameter: 0.18, segments: 4 }, scene);
-    tip.material = mat(scene, `tip${slot}`, color, { emissive: 0.8 });
-    tip.position.set(-0.6, 2.5, -0.45);
-    for (const [x, z] of [[0.85, 0.85], [0.85, -0.85], [-0.85, 0.85], [-0.85, -0.85]] as const) {
-      const w = MeshBuilder.CreateCylinder("wheel", { diameter: 0.9, height: 0.45, tessellation: 14 }, scene);
-      w.material = tyre;
-      w.rotation.x = Math.PI / 2;
-      w.position.set(x, 0.45, z);
-      w.parent = this.root;
-      this.wheels.push(w);
-      world.shadows.addShadowCaster(w);
+    const parts: Mesh[] = [];
+    const add = (m: Mesh, x: number, y: number, z: number, material: StandardMaterial) => {
+      m.position.set(x, y, z);
+      m.material = material;
+      m.parent = this.body;
+      parts.push(m);
+      return m;
+    };
+    add(MeshBuilder.CreateBox("chassis", { width: 2.5, height: 0.3, depth: 1.3 }, scene), 0, 0.5, 0, dark);
+    add(MeshBuilder.CreateBox("shell", { width: 1.6, height: 0.55, depth: 1.2 }, scene), -0.1, 0.9, 0, this.shellMat);
+    add(MeshBuilder.CreateBox("nose", { width: 0.7, height: 0.28, depth: 1.05 }, scene), 1.0, 0.7, 0, this.shellMat);
+    add(MeshBuilder.CreateBox("wing", { width: 0.45, height: 0.08, depth: 1.7 }, scene), -1.2, 1.4, 0, this.shellMat);
+    add(MeshBuilder.CreateBox("strut", { width: 0.1, height: 0.5, depth: 0.1 }, scene), -1.15, 1.15, 0, dark);
+    add(MeshBuilder.CreateCylinder("antenna", { diameter: 0.05, height: 1.6, tessellation: 4 }, scene), -0.6, 1.75, -0.4, dark);
+    add(MeshBuilder.CreateSphere("tip", { diameter: 0.18, segments: 4 }, scene), -0.6, 2.55, -0.4, mat(scene, `tip${slot}`, color, { emissive: 0.8 }));
+
+    for (const [x, z] of [[0.85, 0.82], [0.85, -0.82], [-0.85, 0.82], [-0.85, -0.82]] as const) {
+      const pivot = new TransformNode("wheel-pivot", scene);
+      pivot.parent = this.root;
+      pivot.position.set(x, WHEEL_RADIUS, z);
+      // Cylinder axis is Y; bake it onto Z so the axle points sideways and spin is a pure Z rotation.
+      const tyre = MeshBuilder.CreateCylinder("tyre", { diameter: WHEEL_RADIUS * 2, height: 0.42, tessellation: 16 }, scene);
+      tyre.rotation.x = Math.PI / 2;
+      tyre.bakeCurrentTransformIntoVertices();
+      tyre.material = tyreMat;
+      tyre.parent = pivot;
+      // Two crossed spokes on the outer face make the rotation visible.
+      for (const angle of [0, Math.PI / 2]) {
+        const spoke = MeshBuilder.CreateBox("spoke", { width: WHEEL_RADIUS * 1.5, height: 0.12, depth: 0.05 }, scene);
+        spoke.material = rimMat;
+        spoke.rotation.z = angle;
+        spoke.position.z = z > 0 ? 0.22 : -0.22;
+        spoke.parent = tyre;
+      }
+      this.wheels.push({ pivot, tyre, front: x > 0 });
+      world.shadows.addShadowCaster(tyre);
     }
-    for (const m of [chassis, shell, nose, wing, strut, antenna, tip]) {
-      m.parent = this.root;
-      world.shadows.addShadowCaster(m);
-    }
-    this.shield = MeshBuilder.CreateSphere("shield", { diameter: 3.8, segments: 12 }, scene);
+    for (const m of parts) world.shadows.addShadowCaster(m);
+
+    this.shield = MeshBuilder.CreateSphere("shield", { diameter: 3.9, segments: 12 }, scene);
     this.shield.material = mat(scene, `shieldm${slot}`, "#2fd3ff", { emissive: 0.6, alpha: 0.28 });
     this.shield.parent = this.root;
-    this.shield.position.y = 0.8;
+    this.shield.position.y = 0.9;
     this.shield.isVisible = false;
     this.flame = MeshBuilder.CreateCylinder("flame", { diameterTop: 0, diameterBottom: 0.7, height: 1.6, tessellation: 8 }, scene);
     this.flame.material = mat(scene, `flame${slot}`, "#ff9f1c", { emissive: 1, alpha: 0.85 });
-    this.flame.parent = this.root;
+    this.flame.parent = this.body;
     this.flame.rotation.z = Math.PI / 2;
-    this.flame.position.set(-2.1, 0.6, 0);
+    this.flame.position.set(-2.0, 0.65, 0);
     this.flame.isVisible = false;
   }
 
-  update(x: number, y: number, heading: number, speed: number, flags: number, dt: number, now: number): void {
-    this.root.position.copyFrom(toWorld(x, y, 0));
+  /**
+   * `forwardSpeed` is signed (negative when reversing) so wheels roll backwards.
+   * `yawRate` drives front-wheel steering and body roll.
+   */
+  update(x: number, y: number, z: number, heading: number, forwardSpeed: number, yawRate: number, flags: number, dt: number, now: number): void {
+    this.root.position.copyFrom(toWorld(x, y, z));
     // Babylon is left-handed: rotating +x towards +z needs a negative yaw.
     this.root.rotation.y = -heading;
-    this.wheelSpin += speed * dt * 2.2;
-    for (const w of this.wheels) w.rotation.y = this.wheelSpin;
+
+    // Roll the tyres by distance travelled (arc length / radius). Airborne wheels keep spinning freely.
+    this.spin -= (forwardSpeed * dt) / WHEEL_RADIUS;
+    const steerTarget = Math.max(-MAX_STEER_VISUAL, Math.min(MAX_STEER_VISUAL, yawRate * 0.35 * Math.sign(forwardSpeed || 1)));
+    this.steer += (steerTarget - this.steer) * Math.min(1, dt * 12);
+    for (const w of this.wheels) {
+      w.tyre.rotation.z = this.spin;
+      // Positive game yaw turns left; in this left-handed frame that is a negative Y rotation.
+      w.pivot.rotation.y = w.front ? -this.steer : 0;
+    }
+
+    // Body lean: roll out of corners, pitch under acceleration/braking, nose-up in the air.
+    const accel = dt > 0 ? (forwardSpeed - this.lastSpeed) / dt : 0;
+    this.lastSpeed = forwardSpeed;
+    const airborne = (flags & CAR_FLAG.AIRBORNE) !== 0;
+    // Left-handed frame: +rotation.x tips the roof towards the car's left, +rotation.z lifts the nose.
+    // Lean out of the turn (opposite to yaw), squat under throttle, dive under braking.
+    const rollTarget = Math.max(-0.12, Math.min(0.12, -yawRate * forwardSpeed * 0.004));
+    const pitchTarget = airborne ? 0.12 : Math.max(-0.08, Math.min(0.08, accel * 0.004));
+    const k = Math.min(1, dt * 8);
+    this.roll += (rollTarget - this.roll) * k;
+    this.pitch += (pitchTarget - this.pitch) * k;
+    this.body.rotation.x = this.roll;
+    this.body.rotation.z = this.pitch;
+
     const wrecked = (flags & CAR_FLAG.WRECKED) !== 0;
     const stunned = (flags & CAR_FLAG.STUNNED) !== 0;
     this.root.rotation.z = wrecked ? Math.PI * 0.9 : stunned ? Math.sin(now / 50) * 0.15 : 0;
@@ -114,7 +172,7 @@ export class CarViews {
     return this.views.get(slot);
   }
 
-  /** Hide cars that left the match. */
+  /** Removes cars that left the match. */
   retain(slots: Set<number>): void {
     for (const [slot, v] of this.views) {
       if (!slots.has(slot)) {

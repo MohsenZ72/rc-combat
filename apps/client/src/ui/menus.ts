@@ -11,7 +11,8 @@ const controlsHelp = () =>
     h("dt", {}, h("span", { class: "kbd" }, "S"), h("span", { class: "kbd" }, "↓")), h("dd", {}, "Brake / reverse"),
     h("dt", {}, h("span", { class: "kbd" }, "A"), h("span", { class: "kbd" }, "D")), h("dd", {}, "Steer"),
     h("dt", {}, h("span", { class: "kbd" }, "Shift")), h("dd", {}, "Drift (tighter turns, a little slower)"),
-    h("dt", {}, h("span", { class: "kbd" }, "Space")), h("dd", {}, "Fire zapper (ammo refills each lap)"),
+    h("dt", {}, h("span", { class: "kbd" }, "Space")), h("dd", {}, "Jump: hop over shots, mines and cars"),
+    h("dt", {}, h("span", { class: "kbd" }, "F")), h("dd", {}, "Fire zapper (ammo refills each lap)"),
     h("dt", {}, h("span", { class: "kbd" }, "E")), h("dd", {}, "Use item from a ? box"),
   );
 

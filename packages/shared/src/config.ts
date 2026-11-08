@@ -38,6 +38,17 @@ export interface CarConfig {
   /** Bounce coefficient between cars. */
   carRestitution: number;
   maxHealth: number;
+  /** Take-off vertical speed in m/s. Apex = jumpVelocity² / (2·gravity). */
+  jumpVelocity: number;
+  gravity: number;
+  /** Seconds between take-offs. */
+  jumpCooldown: number;
+  /** Fraction of steering kept while airborne. */
+  airSteer: number;
+  /** Fraction of speed kept on landing. */
+  landingSpeedKeep: number;
+  /** Height below which a car is hit by ground-level shots and collides with other cars. */
+  bodyHeight: number;
 }
 
 export interface ItemConfig {
@@ -95,6 +106,7 @@ export type AnomalyKind =
   | "wall_clip"
   | "checkpoint_skip"
   | "progress_jump"
+  | "jump"
   | "invalid_state";
 
 export type SuspicionLevel =
@@ -142,7 +154,7 @@ export interface GameConfig {
 export const DEFAULT_CONFIG: GameConfig = {
   maxPlayers: 10,
   car: {
-    radius: 1.1,
+    radius: 1.3,
     maxSpeed: 30,
     maxReverseSpeed: 9,
     acceleration: 15,
@@ -160,6 +172,12 @@ export const DEFAULT_CONFIG: GameConfig = {
     wallRestitution: 0.25,
     carRestitution: 0.6,
     maxHealth: 100,
+    jumpVelocity: 7.5,
+    gravity: 22,
+    jumpCooldown: 1.1,
+    airSteer: 0.3,
+    landingSpeedKeep: 0.95,
+    bodyHeight: 1.0,
   },
   items: {
     rocket: { speed: 46, turnRate: 3.2, lifetime: 4, damage: 35, stun: 1.0, hitRadius: 0.9, armTime: 0.15 },
@@ -184,13 +202,13 @@ export const DEFAULT_CONFIG: GameConfig = {
   },
   net: {
     tickRate: 30,
-    snapshotDivisor: 2,
+    snapshotDivisor: 1,
     inputBufferSize: 6,
     inputRateMultiplier: 1.5,
     inputBurst: 30,
     maxMessageBytes: 4096,
     pingIntervalMs: 2000,
-    interpolationDelayMs: 120,
+    interpolationDelayMs: 70,
   },
   antiCheat: {
     speedTolerance: 0.08,
@@ -212,6 +230,7 @@ export const DEFAULT_CONFIG: GameConfig = {
       wall_clip: 20,
       checkpoint_skip: 20,
       progress_jump: 20,
+      jump: 20,
       invalid_state: 20,
     },
     repeatWindowSeconds: 10,

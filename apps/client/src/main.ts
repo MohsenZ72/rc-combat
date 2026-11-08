@@ -15,9 +15,12 @@ let client: RaceClient | null = null;
 
 /** Close codes the server uses (see apps/game-server/src/rooms/race-room.ts). */
 const CLOSE_REASONS: Record<number, string> = {
-  4003: "You were disconnected for sending invalid data.",
-  4009: "You are already racing in this match from another tab.",
+  4003: "Lost connection to the race server and could not reconnect in time.",
+  4011: "You were disconnected for sending invalid data.",
+  4012: "You are already racing in this match from another tab.",
 };
+/** Normal endings: we left (4000 CONSENTED) or the server closed a finished match (4013). */
+const NORMAL_CLOSES = new Set([1000, 4000, 4013]);
 
 async function getClient(): Promise<RaceClient> {
   // The 3D engine and physics are lazy-loaded after the menu is interactive.
@@ -65,7 +68,7 @@ async function play(nickname: string): Promise<void> {
     document.body.dataset.connection = state;
   });
   rc.on("closed", ({ code }) => {
-    if (code === 4000 || code === 1000) return; // normal end of match / we left
+    if (NORMAL_CLOSES.has(code)) return;
     rc.attachHud(null);
     screens.reset(new NoticeScreen("Disconnected", CLOSE_REASONS[code] ?? "Lost connection to the race server.", "Back to menu", showTitle));
   });

@@ -22,7 +22,8 @@ export interface RoomDeps {
 type RaceClient = Client<{ userData: { playerId: string }; auth: AuthenticatedPlayer }>;
 
 /** Close codes sent to clients so the UI can explain what happened. */
-export const CLOSE = { KICKED: 4003, DUPLICATE: 4009, MATCH_OVER: 4000 } as const;
+/** Colyseus reserves 4000–4010; custom codes live in 4011–4999. */
+export const CLOSE = { KICKED: 4011, DUPLICATE: 4012, MATCH_OVER: 4013 } as const;
 
 /**
  * Colyseus adapter around MatchSession: authentication, lobby timing,

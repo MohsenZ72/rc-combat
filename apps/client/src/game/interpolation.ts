@@ -58,7 +58,7 @@ export class SnapshotInterpolator {
         out.push(cb);
         continue;
       }
-      out.push({ ...cb, x: lerp(ca.x, cb.x, t), y: lerp(ca.y, cb.y, t), heading: lerpAngle(ca.heading, cb.heading, t) });
+      out.push({ ...cb, x: lerp(ca.x, cb.x, t), y: lerp(ca.y, cb.y, t), z: lerp(ca.z, cb.z, t), heading: lerpAngle(ca.heading, cb.heading, t) });
     }
     return out;
   }
