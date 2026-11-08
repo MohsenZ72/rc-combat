@@ -1,6 +1,7 @@
 import { CarPredictor, lerpAngle, loadRapier, Track, TRACKS, WORKSHOP_CIRCUIT } from "@rc/game-core";
 import { CAR_FLAG, DEFAULT_CONFIG, ITEM_NAMES, mergeConfig, Phase, type CarSnapshot, type Cosmetics, type GameConfig, type GameEvent, type Snapshot } from "@rc/shared";
 import { Connection, type LobbyState, type ResultsMessage, type SeatInfo, type Welcome } from "../net/connection.js";
+import { LocalConnection, type LocalPlayer } from "../net/local.js";
 import type { ParticleSystem, Texture } from "@babylonjs/core";
 import { CarView, CarViews } from "../render/cars.js";
 import { flareTexture, trail } from "../render/fx/particles.js";
@@ -77,7 +78,8 @@ export class RaceClient extends Emitter<ClientEvents> {
   private flareTex: Texture | null = null;
   /** Track segment hint per car for fast ground-height lookups. */
   private groundHints = new Map<number, number>();
-  private readonly net = new Connection();
+  /** Online (Colyseus) or offline (in-browser match against bots); same messages either way. */
+  private net: Connection | LocalConnection = new Connection();
   private readonly input = new InputController();
   private config: GameConfig = DEFAULT_CONFIG;
   private predictor: CarPredictor | null = null;
@@ -139,9 +141,11 @@ export class RaceClient extends Emitter<ClientEvents> {
     this.tags.clear();
   }
 
-  async join(token: string, track = "any"): Promise<void> {
+  /** Joins a race. With `offline`, the match runs in this browser against bots (no server). */
+  async join(token: string, track = "any", offline?: LocalPlayer): Promise<void> {
     this.resetMatch();
     this.net.clear();
+    this.net = offline ? new LocalConnection(this.rapier, (id) => this.trackFor(id), offline) : new Connection();
     this.net.on("welcome", (w) => this.onWelcome(w));
     this.net.on("lobby", (l) => this.emit("lobby", l));
     this.net.on("snapshot", (s) => this.onSnapshot(s));

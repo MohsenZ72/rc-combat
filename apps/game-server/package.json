@@ -8,7 +8,7 @@
     "start": "node --env-file-if-exists=../../.env dist/index.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "loadtest": "tsx --conditions=source --env-file-if-exists=../../.env scripts/loadtest.ts"
   },
   "dependencies": {

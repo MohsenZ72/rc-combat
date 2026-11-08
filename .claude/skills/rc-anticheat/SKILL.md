@@ -8,7 +8,7 @@ description: Work on Garage Rumble anti-cheat - InputGuard, movement validator, 
 Read `docs/system-design/03-anti-cheat.md` (threat table plus layers).
 
 ## Workflow for a new cheat vector
-1. **Write the failing test first** in `packages/game-core/test/anticheat.test.ts` (simulation-level), `apps/game-server/test/match-session.test.ts` (protocol/session) or `apps/api/test/api.e2e.test.ts` (results/sanctions).
+1. **Write the failing test first** in `packages/game-core/test/anticheat.test.ts` (simulation-level), `packages/game-core/test/match-session.test.ts` (protocol/session) or `apps/api/test/api.e2e.test.ts` (results/sanctions).
 2. Prefer **removing the capability** (the server decides) over detecting it.
 3. If detection is needed, add an `AnomalyKind` in `packages/shared/src/config.ts` with points in `DEFAULT_CONFIG.antiCheat.points`:
    minor (<5) = network noise, decays; moderate (5) = physics edge; major (20) = impossible, escalates ×2.5 on repeat.

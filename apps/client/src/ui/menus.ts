@@ -48,6 +48,7 @@ export class TitleScreen implements Screen {
     private readonly onPlay: (nickname: string, track: string) => Promise<void>,
     track = "any",
     private readonly onGarage?: (nickname: string) => Promise<void>,
+    private readonly opts: { offlineOnly?: boolean; onPractice?: (nickname: string, track: string) => Promise<void> } = {},
   ) {
     this.track = track;
     this.input = h("input", {
@@ -61,7 +62,10 @@ export class TitleScreen implements Screen {
       value: nickname ?? "",
       required: true,
     });
-    this.button = h("button", { class: "btn btn--primary btn--block", type: "submit" }, "Find a race");
+    this.button = h("button", { class: "btn btn--primary btn--block", type: "submit" }, this.playLabel);
+    const practice = opts.onPractice
+      ? h("button", { class: "btn btn--ghost btn--block", type: "button", onclick: () => void this.practice() }, "Practice offline vs 9 bots")
+      : null;
     this.error = h("p", { class: "error", role: "alert" });
     const form = h(
       "form",
@@ -69,6 +73,7 @@ export class TitleScreen implements Screen {
       h("div", { class: "field" }, h("label", { for: "nick" }, "Racer name"), this.input),
       this.mapPicker(),
       this.button,
+      ...(practice ? [practice] : []),
       h("button", { class: "btn btn--ghost btn--block", type: "button", onclick: () => void this.openGarage() }, "Garage — customise your car"),
       this.error,
     );
@@ -79,11 +84,31 @@ export class TitleScreen implements Screen {
         "div",
         { class: "panel stack" },
         h("h1", { class: "rc-hero" }, "Garage", h("br"), h("span", {}, "Rumble")),
-        h("p", { class: "rc-muted" }, "10 diecast cars racing round the house. Race first, fight second. Same car stats for everyone."),
+        h(
+          "p",
+          { class: "rc-muted" },
+          opts.offlineOnly
+            ? "10 diecast cars racing round the house. Race first, fight second. This web build races you against 9 bots, right in your browser."
+            : "10 diecast cars racing round the house. Race first, fight second. Same car stats for everyone.",
+        ),
         form,
         controlsHelp(),
       ),
     );
+  }
+
+  private get playLabel(): string {
+    return this.opts.offlineOnly ? "Race 9 bots" : "Find a race";
+  }
+
+  private async practice(): Promise<void> {
+    const parsed = nicknameSchema.safeParse(this.input.value);
+    if (!parsed.success) {
+      this.error.textContent = parsed.error.issues[0]?.message ?? "Invalid name";
+      this.input.focus();
+      return;
+    }
+    await this.opts.onPractice?.(parsed.data, this.track);
   }
 
   focusTarget() {
@@ -140,14 +165,14 @@ export class TitleScreen implements Screen {
       return;
     }
     this.button.disabled = true;
-    this.button.textContent = "Connecting…";
+    this.button.textContent = this.opts.offlineOnly ? "Starting…" : "Connecting…";
     this.error.textContent = "";
     try {
       await this.onPlay(parsed.data, this.track);
     } catch (err) {
       this.error.textContent = (err as Error).message || "Could not connect. Is the server running?";
       this.button.disabled = false;
-      this.button.textContent = "Find a race";
+      this.button.textContent = this.playLabel;
     }
   }
 }

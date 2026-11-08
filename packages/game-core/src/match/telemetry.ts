@@ -1,5 +1,5 @@
 import type { GameEvent, PlayerTelemetry } from "@rc/shared";
-import { speedOf, type CarState } from "@rc/game-core";
+import { speedOf, type CarState } from "../car.js";
 
 /** Server-side per-player telemetry for anti-cheat review and tuning. */
 export class TelemetryCollector {

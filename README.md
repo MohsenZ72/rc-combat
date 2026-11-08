@@ -9,6 +9,10 @@ A browser-based, 10-player **toy-car combat racing** game with **server-authorit
 
 > Working title. Original game, original code and assets. Inspired by the arcade combat-kart genre, not a copy of any game.
 
+## Play now
+
+**<https://mohsenz72.github.io/rc-combat/>** — the web build runs a full race against 9 bots right in your browser (no account, no server). Desktop Chrome, Edge, Firefox or Safari with WebGL2; add `?gfx=low` on slower machines.
+
 ## Quick start
 
 ```bash

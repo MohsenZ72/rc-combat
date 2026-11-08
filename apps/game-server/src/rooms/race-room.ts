@@ -5,7 +5,7 @@ import type { BackendPort } from "../api-client.js";
 import { AuthError, type AuthenticatedPlayer, type TokenVerifier } from "../auth.js";
 import type { Env } from "../env.js";
 import type { Logger } from "../logger.js";
-import { MatchSession } from "../match/match-session.js";
+import { MatchSession } from "@rc/game-core";
 import { metrics } from "../metrics.js";
 import { PlayerInfo, RaceState, type RaceStateT } from "./race-state.js";
 

@@ -48,7 +48,7 @@ export interface LobbyState {
   players: SeatInfo[];
 }
 
-type NetEvents = {
+export type NetEvents = {
   welcome: Welcome;
   snapshot: Snapshot;
   events: GameEvent[];

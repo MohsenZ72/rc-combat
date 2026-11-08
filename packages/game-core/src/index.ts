@@ -14,3 +14,5 @@ export * from "./predictor.js";
 export * from "./anticheat/input-guard.js";
 export * from "./anticheat/movement-validator.js";
 export * from "./anticheat/suspicion.js";
+export * from "./match/telemetry.js";
+export * from "./match/match-session.js";

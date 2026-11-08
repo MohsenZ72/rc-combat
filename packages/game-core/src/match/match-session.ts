@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   DEFAULT_COSMETICS,
   randomCosmetics,
@@ -17,7 +16,13 @@ import {
   type PlayerResult,
   type PlayerSeat,
 } from "@rc/shared";
-import { BotDriver, InputGuard, levelAtLeast, RaceSimulation, ReplayRecorder, type Rapier, type Replay, type Track } from "@rc/game-core";
+import { BotDriver } from "../bot.js";
+import { InputGuard } from "../anticheat/input-guard.js";
+import { levelAtLeast } from "../anticheat/suspicion.js";
+import type { Rapier } from "../physics.js";
+import { ReplayRecorder, type Replay } from "../replay.js";
+import { RaceSimulation } from "../simulation.js";
+import type { Track } from "../track.js";
 import { TelemetryCollector } from "./telemetry.js";
 
 export interface Seat extends PlayerSeat {
@@ -58,7 +63,8 @@ export interface StepOutput {
 export type SessionPhase = "lobby" | "running" | "finished";
 
 /**
- * One match, independent of the networking framework. Owns seats, the
+ * One match, independent of the networking framework and of Node (it also
+ * runs in the browser for offline races against bots). Owns seats, the
  * authoritative simulation, input guards, telemetry, anti-cheat verdicts and
  * the replay. The Colyseus room is a thin adapter around this class, which
  * keeps the rules testable without sockets.
@@ -76,7 +82,7 @@ export class MatchSession {
 
   constructor(deps: SessionDeps) {
     this.deps = deps;
-    this.matchId = deps.matchId ?? randomUUID();
+    this.matchId = deps.matchId ?? globalThis.crypto.randomUUID();
     this.seed = deps.seed ?? (Math.random() * 0x7fffffff) | 0;
   }
 

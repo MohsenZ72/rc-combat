@@ -1,5 +1,5 @@
 import { BTN, DEFAULT_CONFIG, encodeInput, matchOutcomeSchema, mergeConfig, Phase } from "@rc/shared";
-import { loadRapier, Track, verifyReplay, WORKSHOP_CIRCUIT } from "@rc/game-core";
+import { loadRapier, Track, verifyReplay, WORKSHOP_CIRCUIT } from "../src/index.js";
 import { describe, expect, it } from "vitest";
 import { MatchSession } from "../src/match/match-session.js";
 

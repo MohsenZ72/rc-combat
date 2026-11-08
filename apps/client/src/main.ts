@@ -2,7 +2,7 @@ import "./styles/tokens.css";
 import "./styles/ui.css";
 import { checkSession, fetchCosmetics, guestLogin, loadSession, saveCosmetics, type Session } from "./net/api.js";
 import { GarageScreen } from "./ui/garage.js";
-import { Phase } from "@rc/shared";
+import { Phase, sanitizeCosmetics, type Cosmetics } from "@rc/shared";
 import type { RaceClient } from "./game/race-client.js";
 import { HudScreen } from "./ui/hud.js";
 import { LobbyScreen, NoticeScreen, ResultsScreen, TitleScreen } from "./ui/menus.js";
@@ -13,6 +13,39 @@ const canvas = document.getElementById("scene") as HTMLCanvasElement;
 const screens = new ScreenStack(ui);
 let session: Session | null = loadSession();
 let client: RaceClient | null = null;
+
+/**
+ * Static build (GitHub Pages): no API or game server exists, so every race
+ * runs offline in the browser against bots and the car is stored locally.
+ */
+const OFFLINE_ONLY = import.meta.env.VITE_OFFLINE_ONLY === "1";
+const LOCAL_CAR = "rc.cosmetics";
+const LOCAL_NAME = "rc.nickname";
+
+function storageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function storageSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // private mode: the car simply isn't remembered
+  }
+}
+
+function localCosmetics(): Cosmetics {
+  const raw = storageGet(LOCAL_CAR);
+  try {
+    return sanitizeCosmetics(raw ? JSON.parse(raw) : null);
+  } catch {
+    return sanitizeCosmetics(null);
+  }
+}
 
 /** Close codes the server uses (see apps/game-server/src/rooms/race-room.ts). */
 const CLOSE_REASONS: Record<number, string> = {
@@ -35,7 +68,8 @@ async function getClient(): Promise<RaceClient> {
 }
 
 function showTitle(): void {
-  screens.reset(new TitleScreen(session?.player.nickname ?? null, play, lastTrack, openGarage));
+  const name = OFFLINE_ONLY ? storageGet(LOCAL_NAME) : (session?.player.nickname ?? storageGet(LOCAL_NAME));
+  screens.reset(new TitleScreen(name, play, lastTrack, openGarage, { offlineOnly: OFFLINE_ONLY, onPractice: OFFLINE_ONLY ? undefined : practice }));
 }
 
 let lastTrack = "any";
@@ -48,15 +82,17 @@ async function ensureSession(nickname: string): Promise<Session> {
 }
 
 async function openGarage(nickname: string): Promise<void> {
-  const s = await ensureSession(nickname);
+  storageSet(LOCAL_NAME, nickname);
+  const s = OFFLINE_ONLY ? null : await ensureSession(nickname);
   const rc = await getClient();
-  const current = await fetchCosmetics(s);
+  const current = s ? await fetchCosmetics(s) : localCosmetics();
   screens.reset(
     new GarageScreen(
       current,
       (c) => rc.showGarage(c),
       async (c) => {
-        await saveCosmetics(s, c);
+        storageSet(LOCAL_CAR, JSON.stringify(c));
+        if (s) await saveCosmetics(s, c);
       },
       () => {
         rc.closeGarage();
@@ -66,9 +102,15 @@ async function openGarage(nickname: string): Promise<void> {
   );
 }
 
-async function play(nickname: string, track = lastTrack): Promise<void> {
+/** Offline race against bots from the online build's menu. */
+function practice(nickname: string, track = lastTrack): Promise<void> {
+  return play(nickname, track, true);
+}
+
+async function play(nickname: string, track = lastTrack, offline = OFFLINE_ONLY): Promise<void> {
   lastTrack = track;
-  const s = await ensureSession(nickname);
+  storageSet(LOCAL_NAME, nickname);
+  const s = offline ? null : await ensureSession(nickname);
   const rc = await getClient();
   rc.closeGarage();
   rc.clear();
@@ -88,7 +130,7 @@ async function play(nickname: string, track = lastTrack): Promise<void> {
       new ResultsScreen(
         r,
         rc.slot,
-        () => void play(nickname, track).catch(() => showTitle()),
+        () => void play(nickname, track, offline).catch(() => showTitle()),
         () => void rc.leave().then(showTitle),
       ),
     );
@@ -103,9 +145,10 @@ async function play(nickname: string, track = lastTrack): Promise<void> {
   });
   screens.reset(lobby);
   try {
-    await rc.join(s.token, track);
+    if (s) await rc.join(s.token, track);
+    else await rc.join("", track, { nickname, cosmetics: localCosmetics() });
   } catch (err) {
-    screens.reset(new TitleScreen(nickname, play, track, openGarage));
+    showTitle();
     throw err;
   }
 }
