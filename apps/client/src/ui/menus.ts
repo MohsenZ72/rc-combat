@@ -4,19 +4,21 @@ import type { LobbyState, ResultsMessage, SeatInfo } from "../net/connection.js"
 import { clear, formatTime, h, ordinal } from "./dom.js";
 import type { Screen } from "./screens.js";
 
+const MAP_NOTES: Record<string, string> = {
+  "toy-track": "orange toy track, flat & fast",
+  rug: "living room, rug hills & book ramps",
+  kitchen: "kitchen tiles, washer, spills",
+  "toy-canyon": "kids' room, 12 m climbs & splash",
+  bathroom: "bathtub, mosaic tiles, puddles",
+  garden: "dirt path, lawn mounds, puddles",
+  bedroom: "carpet, duvet hills, book ramps",
+  workshop: "concrete, oil slicks, plank ramps",
+  library: "parquet, book-stack climbs",
+  sandbox: "playground dunes & paddling pool",
+};
+
 function mapNote(theme: string): string {
-  switch (theme) {
-    case "toy-track":
-      return "orange toy track, flat & fast";
-    case "rug":
-      return "living-room rug, hills & book ramps";
-    case "kitchen":
-      return "kitchen tiles, water spills";
-    case "toy-canyon":
-      return "toy track canyon, big climbs & splash";
-    default:
-      return "";
-  }
+  return MAP_NOTES[theme] ?? "";
 }
 
 const controlsHelp = () =>

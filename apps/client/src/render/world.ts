@@ -19,7 +19,9 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import { Rng, type Track } from "@rc/game-core";
-import { THEMES, type ThemeStyle } from "./themes.js";
+import { Kit } from "./room/kit.js";
+import { buildRoom, roomFor, type Room } from "./room/rooms.js";
+import { THEMES, type FloorKind, type ThemeStyle } from "./themes.js";
 
 /** Game (x, y) on the floor plane → Babylon (x, height, y). */
 export const toWorld = (x: number, y: number, h = 0) => new Vector3(x, h, y);
@@ -144,10 +146,13 @@ export class World {
     this.trackRoot = root;
     this.scene.clearColor = Color4.FromHexString(`${this.theme.clear}ff`);
     this.scene.fogColor = Color3.FromHexString(this.theme.fog);
+    this.scene.fogDensity = this.theme.fogDensity;
     this.sun.intensity = this.theme.sunIntensity;
+    this.hemi.intensity = this.theme.hemiIntensity;
 
     const bounds = trackBounds(track);
-    this.buildFloor(track, bounds, root);
+    const room = roomFor(bounds, this.theme.outdoor);
+    this.buildFloor(track, bounds, root, room);
     this.buildSurface(track, bounds, root);
     this.buildSkirts(track, root);
     this.buildBarriers(track, root);
@@ -155,19 +160,22 @@ export class World {
     this.buildWater(track, root);
     this.buildRamps(track, root);
     this.buildStartLine(track, root);
-    this.buildProps(track, bounds, root);
+    // The room around the circuit: walls, windows, furniture, clutter.
+    buildRoom(new Kit(this.scene, root, this.shadows), track, room);
   }
 
   // ------------------------------------------------------------------ floor + surface
 
-  private buildFloor(track: Track, b: Bounds, root: TransformNode): void {
-    const size = Math.max(b.maxX - b.minX, b.maxY - b.minY) + 500;
-    const floor = MeshBuilder.CreateGround("floor", { width: size, height: size }, this.scene);
-    floor.position = toWorld((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, -0.02);
+  private buildFloor(track: Track, b: Bounds, root: TransformNode, room: Room): void {
+    // Indoors the floor ends at the walls; outdoors the lawn/sand runs to the horizon.
+    const w = this.theme.outdoor ? room.x1 - room.x0 + 1600 : room.x1 - room.x0;
+    const d = this.theme.outdoor ? room.y1 - room.y0 + 1600 : room.y1 - room.y0;
+    const floor = MeshBuilder.CreateGround("floor", { width: w, height: d }, this.scene);
+    floor.position = toWorld((room.x0 + room.x1) / 2, (room.y0 + room.y1) / 2, -0.02);
     const tex = floorTexture(this.scene, this.theme.floor);
-    tex.uScale = size / (this.theme.floor === "tiles" ? 16 : this.theme.floor === "planks" ? 24 : 30);
-    tex.vScale = tex.uScale;
-    const m = mat(this.scene, "floor", "#ffffff", { specular: this.theme.floor === "tiles" ? 0.35 : 0.05 });
+    tex.uScale = w / FLOOR_TILE[this.theme.floor];
+    tex.vScale = d / FLOOR_TILE[this.theme.floor];
+    const m = mat(this.scene, "floor", "#ffffff", { specular: FLOOR_SPEC[this.theme.floor], specularPower: 48 });
     m.diffuseTexture = tex;
     floor.material = m;
     floor.receiveShadows = true;
@@ -233,16 +241,21 @@ export class World {
     for (const [pts, side] of [[left, 0], [right, 1]] as const) {
       for (const p of pts) {
         if (style === "rug") uvs.push(new Vector2(p.x / RUG_TILE, p.y / RUG_TILE));
-        else if (style === "tiles") uvs.push(new Vector2(p.x / 16, p.y / 16));
+        // "floor": the floor pattern simply continues under the racing line — no road at all.
+        else if (style === "floor") uvs.push(new Vector2(p.x / FLOOR_TILE[this.theme.floor], p.y / FLOOR_TILE[this.theme.floor]));
+        else if (style === "dirt") uvs.push(new Vector2(p.s / 14, side));
         else uvs.push(new Vector2(p.s / 8, side));
       }
     }
     const surface = MeshBuilder.CreateRibbon("surface", { pathArray: [path(left), path(right)], uvs, sideOrientation: Mesh.DOUBLESIDE }, this.scene);
     let m: StandardMaterial;
     if (style === "rug") m = this.rugMaterial();
-    else if (style === "tiles") {
-      m = mat(this.scene, "surface-tiles", "#ffffff", { specular: 0.35 });
-      m.diffuseTexture = floorTexture(this.scene, "tiles");
+    else if (style === "floor") {
+      m = mat(this.scene, "surface-floor", "#ffffff", { specular: FLOOR_SPEC[this.theme.floor], specularPower: 48 });
+      m.diffuseTexture = floorTexture(this.scene, this.theme.floor);
+    } else if (style === "dirt") {
+      m = mat(this.scene, "surface-dirt", "#ffffff", { specular: 0.02 });
+      m.diffuseTexture = dirtTexture(this.scene);
     } else {
       m = mat(this.scene, `surface-${style}`, "#ffffff", { specular: 0.45, specularPower: 48 });
       m.diffuseTexture = plasticTrackTexture(this.scene, style === "plastic-orange" ? "#ff7a1a" : "#2f7de1");
@@ -255,7 +268,8 @@ export class World {
   /** Sides of raised sections, down to the floor (rug draped over cushions, a wooden tray…). */
   private buildSkirts(track: Track, root: TransformNode): void {
     if (this.theme.skirt === "none" || track.elevationStats().max < 0.05) return;
-    const m = this.theme.skirt === "rug" ? this.rugMaterial() : mat(this.scene, "skirt-wood", "#c98b4e", { specular: 0.1 });
+    const skirtColors = { wood: "#c98b4e", grass: "#4f9a44", sand: "#d9b878" } as const;
+    const m = this.theme.skirt === "rug" ? this.rugMaterial() : mat(this.scene, `skirt-${this.theme.skirt}`, skirtColors[this.theme.skirt], { specular: 0.05 });
     for (const side of [1, -1] as const) {
       const edge = track.boundary3(side, -0.01);
       const top = edge.map((p) => toWorld(p.x, p.y, p.z + 0.02));
@@ -299,8 +313,11 @@ export class World {
 
   /** Rows of toy building blocks in alternating colours. */
   private buildBlocks(track: Track, root: TransformNode): void {
+    const [bw, bh, bd] = this.theme.block;
+    const vary = this.theme.blockVariation;
+    const rng = new Rng(track.def.id.length * 31 + 5);
     const bases = this.theme.barrierColors.map((c, i) => {
-      const box = MeshBuilder.CreateBox(`block${i}`, { width: 1.6, height: BARRIER_HEIGHT, depth: 1.6 }, this.scene);
+      const box = MeshBuilder.CreateBox(`block${i}`, { width: bw, height: 1, depth: bd }, this.scene);
       box.material = mat(this.scene, `block${i}`, c, { specular: 0.25 });
       box.parent = root;
       return box;
@@ -314,14 +331,17 @@ export class World {
         const b = pts[i + 1]!;
         const len = Math.hypot(b.x - a.x, b.y - a.y);
         const angle = Math.atan2(b.y - a.y, b.x - a.x);
-        for (let d = carry; d < len; d += 1.75) {
+        const pitch = bw + 0.15;
+        for (let d = carry; d < len; d += pitch) {
           const f = d / len;
           const x = a.x + (b.x - a.x) * f;
           const y = a.y + (b.y - a.y) * f;
           const z = a.z + (b.z - a.z) * f;
-          const m = Matrix.Compose(Vector3.One(), Quaternion.RotationAxis(Vector3.Up(), -angle), toWorld(x, y, z + BARRIER_HEIGHT / 2));
+          // Height varies for books/stones, but never below the jump-proof barrier height.
+          const h = Math.max(BARRIER_HEIGHT, bh * (1 + rng.range(0, vary)));
+          const m = Matrix.Compose(new Vector3(1, h, 1), Quaternion.RotationAxis(Vector3.Up(), -angle + rng.range(-vary, vary) * 0.3), toWorld(x, y, z + h / 2));
           bases[k++ % bases.length]!.thinInstanceAdd(m, false);
-          carry = d + 1.75 - len;
+          carry = d + pitch - len;
         }
       }
     }
@@ -354,7 +374,7 @@ export class World {
 
   private buildWater(track: Track, root: TransformNode): void {
     if (track.waterRanges.length === 0) return;
-    const m = mat(this.scene, "water", this.theme.water, { alpha: 0.38, specular: 1, specularPower: 96, emissive: 0.1 });
+    const m = mat(this.scene, "water", this.theme.water, { alpha: this.theme.waterAlpha, specular: 1, specularPower: 96, emissive: 0.1 });
     m.diffuseTexture = waterTexture(this.scene);
     m.backFaceCulling = false;
     this.waterMats.push(m);
@@ -444,129 +464,6 @@ export class World {
     banner.parent = root;
   }
 
-  // ------------------------------------------------------------------ props
-
-  /** Giant household objects around the circuit (visual only, no collision). */
-  private buildProps(track: Track, b: Bounds, root: TransformNode): void {
-    const scene = this.scene;
-    const rng = new Rng(track.def.id.length * 977 + 7);
-    const kinds = this.theme.props;
-    const palette = ["#e2413b", "#f4c430", "#2f7de1", "#3dbb5c", "#c45bff", "#ff8a1a"];
-    const m = (hex: string, spec = 0.3) => mat(scene, `prop-${hex}`, hex, { specular: spec });
-    let placed = 0;
-    for (let attempt = 0; attempt < 800 && placed < 60; attempt++) {
-      const x = rng.range(b.minX - 70, b.maxX + 70);
-      const y = rng.range(b.minY - 70, b.maxY + 70);
-      const proj = track.project(x, y);
-      if (Math.abs(proj.lateral) - track.halfWidth < 10 + rng.next() * 8) continue;
-      const kind = kinds[rng.int(kinds.length)]!;
-      const color = palette[rng.int(palette.length)]!;
-      const node = new TransformNode(kind, scene);
-      node.parent = root;
-      node.position = toWorld(x, y, 0);
-      node.rotation.y = rng.range(0, Math.PI * 2);
-      const add = (mesh: Mesh) => {
-        mesh.parent = node;
-        this.shadows.addShadowCaster(mesh);
-        return mesh;
-      };
-      switch (kind) {
-        case "blocks": {
-          for (let k = 0; k < 3; k++) {
-            const s = rng.range(3, 6);
-            const blk = add(MeshBuilder.CreateBox("toy-block", { size: s }, scene));
-            blk.material = m(palette[(k + placed) % palette.length]!);
-            blk.position.set(k * 1.5, s / 2 + k * s * 0.9, k);
-          }
-          break;
-        }
-        case "balls": {
-          const r = rng.range(2, 4.5);
-          const ball = add(MeshBuilder.CreateSphere("ball", { diameter: r * 2, segments: 24 }, scene));
-          ball.material = m(color, 0.6);
-          ball.position.y = r;
-          break;
-        }
-        case "toybox": {
-          const box = add(MeshBuilder.CreateBox("toybox", { width: 18, height: 10, depth: 11 }, scene));
-          box.material = m("#c8331f");
-          box.position.y = 5;
-          const lid = add(MeshBuilder.CreateBox("lid", { width: 18.6, height: 1, depth: 11.6 }, scene));
-          lid.material = m("#ffc933");
-          lid.position.y = 10.4;
-          break;
-        }
-        case "sofa": {
-          const seat = add(MeshBuilder.CreateBox("sofa-seat", { width: 46, height: 9, depth: 18 }, scene));
-          seat.material = m("#5b6b8c", 0.05);
-          seat.position.y = 4.5;
-          const back = add(MeshBuilder.CreateBox("sofa-back", { width: 46, height: 16, depth: 5 }, scene));
-          back.material = seat.material;
-          back.position.set(0, 12, -7);
-          break;
-        }
-        case "cushion": {
-          const c = add(MeshBuilder.CreateSphere("cushion", { diameter: 10, segments: 16 }, scene));
-          c.scaling.y = 0.35;
-          c.material = m(color, 0.05);
-          c.position.y = 1.7;
-          break;
-        }
-        case "book": {
-          for (let k = 0; k < 3; k++) {
-            const bk = add(MeshBuilder.CreateBox("book", { width: 12, height: 1.6, depth: 9 }, scene));
-            bk.material = m(palette[(k * 2 + placed) % palette.length]!, 0.1);
-            bk.position.set(rng.range(-1, 1), 0.8 + k * 1.6, rng.range(-1, 1));
-            bk.rotation.y = rng.range(-0.3, 0.3);
-          }
-          break;
-        }
-        case "mug": {
-          const cup = add(MeshBuilder.CreateCylinder("mug", { diameter: 5, height: 6, tessellation: 32 }, scene));
-          cup.material = m("#f2f2f2", 0.6);
-          cup.position.y = 3;
-          const handle = add(MeshBuilder.CreateTorus("mug-handle", { diameter: 3, thickness: 0.6, tessellation: 24 }, scene));
-          handle.rotation.x = Math.PI / 2;
-          handle.material = cup.material;
-          handle.position.set(3, 3, 0);
-          break;
-        }
-        case "fridge": {
-          const f = add(MeshBuilder.CreateBox("fridge", { width: 22, height: 50, depth: 20 }, scene));
-          f.material = m("#e9edf2", 0.7);
-          f.position.y = 25;
-          break;
-        }
-        case "tableLeg": {
-          const leg = add(MeshBuilder.CreateCylinder("table-leg", { diameter: 2.4, height: 40, tessellation: 20 }, scene));
-          leg.material = m("#a0673a", 0.2);
-          leg.position.y = 20;
-          break;
-        }
-        case "fruit": {
-          const r = rng.range(2.5, 4);
-          const fr = add(MeshBuilder.CreateSphere("fruit", { diameter: r * 2, segments: 20 }, scene));
-          fr.material = m(["#d7263d", "#7ac74f", "#ff9f1c"][rng.int(3)]!, 0.5);
-          fr.position.y = r;
-          break;
-        }
-        case "cereal": {
-          const box = add(MeshBuilder.CreateBox("cereal", { width: 8, height: 14, depth: 3 }, scene));
-          box.material = m(color, 0.1);
-          box.position.y = 7;
-          break;
-        }
-        case "bowl": {
-          const bowl = add(MeshBuilder.CreateCylinder("bowl", { diameterTop: 9, diameterBottom: 6, height: 2.5, tessellation: 32 }, scene));
-          bowl.material = m("#2f7de1", 0.5);
-          bowl.position.y = 1.25;
-          break;
-        }
-      }
-      placed++;
-    }
-  }
-
   dispose(): void {
     this.scene.dispose();
     this.engine.dispose();
@@ -613,39 +510,144 @@ function canvasTexture(scene: Scene, name: string, size: number, draw: (c: Canva
   return tex;
 }
 
-function floorTexture(scene: Scene, kind: ThemeStyle["floor"]): DynamicTexture {
-  if (kind === "tiles") {
-    return canvasTexture(scene, "tiles", 512, (c, s) => {
-      c.fillStyle = "#b9c2c9";
-      c.fillRect(0, 0, s, s);
-      const n = 2;
-      const t = s / n;
-      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-        c.fillStyle = (i + j) % 2 === 0 ? "#f4f6f8" : "#dfe9ee";
-        c.fillRect(i * t + 4, j * t + 4, t - 8, t - 8);
-        c.fillStyle = "rgba(255,255,255,0.35)";
-        c.fillRect(i * t + 10, j * t + 10, t * 0.35, 6);
-      }
-    });
+/** World metres per texture repeat, per floor kind. */
+const FLOOR_TILE: Record<FloorKind, number> = { planks: 24, carpet: 30, tiles: 16, mosaic: 10, grass: 26, concrete: 40, parquet: 18, sand: 30, pinkcarpet: 30 };
+const FLOOR_SPEC: Record<FloorKind, number> = { planks: 0.08, carpet: 0.02, tiles: 0.4, mosaic: 0.5, grass: 0.02, concrete: 0.12, parquet: 0.3, sand: 0.02, pinkcarpet: 0.02 };
+
+function noise(c: CanvasRenderingContext2D, s: number, n: number, color: (k: number) => string, size = 2): void {
+  for (let k = 0; k < n; k++) {
+    c.fillStyle = color(k);
+    c.fillRect((k * 97 + ((k * k) % 13)) % s, (k * 57 + ((k * 7) % 11)) % s, size, size);
   }
-  if (kind === "carpet") {
-    return canvasTexture(scene, "carpet", 256, (c, s) => {
-      c.fillStyle = "#5d6f8f";
-      c.fillRect(0, 0, s, s);
-      for (let k = 0; k < 2500; k++) {
-        c.fillStyle = `rgba(${200 + (k % 50)},${210 + (k % 40)},255,${0.05 + (k % 7) * 0.01})`;
-        c.fillRect((k * 97) % s, (k * 57) % s, 2, 2);
-      }
-    });
+}
+
+function floorTexture(scene: Scene, kind: FloorKind): DynamicTexture {
+  switch (kind) {
+    case "tiles":
+      return canvasTexture(scene, "tiles", 512, (c, s) => {
+        c.fillStyle = "#b9c2c9";
+        c.fillRect(0, 0, s, s);
+        const t = s / 2;
+        for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+          c.fillStyle = (i + j) % 2 === 0 ? "#f4f6f8" : "#dfe9ee";
+          c.fillRect(i * t + 4, j * t + 4, t - 8, t - 8);
+          c.fillStyle = "rgba(255,255,255,0.35)";
+          c.fillRect(i * t + 10, j * t + 10, t * 0.35, 6);
+        }
+      });
+    case "mosaic":
+      return canvasTexture(scene, "mosaic", 512, (c, s) => {
+        c.fillStyle = "#e9f2f4";
+        c.fillRect(0, 0, s, s);
+        const n = 8;
+        const t = s / n;
+        const cols = ["#9fd0d8", "#bfe3e8", "#7fbfca", "#d9eef2", "#ffffff"];
+        for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+          c.fillStyle = cols[(i * 7 + j * 3) % cols.length]!;
+          c.fillRect(i * t + 3, j * t + 3, t - 6, t - 6);
+        }
+      });
+    case "grass":
+      return canvasTexture(scene, "grass", 512, (c, s) => {
+        c.fillStyle = "#4f9a44";
+        c.fillRect(0, 0, s, s);
+        noise(c, s, 9000, (k) => ["#5aa84a", "#3f8f3a", "#6bb85a", "#467f3c"][k % 4]!, 3);
+        c.strokeStyle = "rgba(30,70,25,0.35)";
+        for (let k = 0; k < 800; k++) {
+          const x = (k * 131) % s;
+          const y = (k * 71) % s;
+          c.beginPath();
+          c.moveTo(x, y);
+          c.lineTo(x + ((k % 5) - 2), y - 7);
+          c.stroke();
+        }
+      });
+    case "concrete":
+      return canvasTexture(scene, "concrete", 512, (c, s) => {
+        c.fillStyle = "#8d9196";
+        c.fillRect(0, 0, s, s);
+        noise(c, s, 12000, (k) => `rgba(${k % 2 ? 255 : 0},${k % 2 ? 255 : 0},${k % 2 ? 255 : 0},${0.04 + (k % 5) * 0.012})`, 2);
+        c.strokeStyle = "rgba(40,40,40,0.35)";
+        c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(0, s * 0.5);
+        c.lineTo(s, s * 0.5);
+        c.moveTo(s * 0.5, 0);
+        c.lineTo(s * 0.5, s);
+        c.stroke();
+        c.strokeStyle = "rgba(30,30,30,0.25)";
+        c.beginPath();
+        c.moveTo(s * 0.2, s * 0.1);
+        c.lineTo(s * 0.26, s * 0.22);
+        c.lineTo(s * 0.24, s * 0.33);
+        c.stroke();
+      });
+    case "parquet":
+      return canvasTexture(scene, "parquet", 512, (c, s) => {
+        c.fillStyle = "#7a4a2a";
+        c.fillRect(0, 0, s, s);
+        const w = s / 8;
+        const l = s / 2;
+        const shades = ["#8a5a36", "#9c6d48", "#7a4a2a", "#a87a52"];
+        for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++) {
+          c.save();
+          c.translate(i * w + (j % 2 ? w / 2 : 0), j * (l / 2));
+          c.rotate(j % 2 ? Math.PI / 4 : -Math.PI / 4);
+          c.fillStyle = shades[(i + j) % shades.length]!;
+          c.fillRect(-w / 2, -l / 4, w - 2, l / 2 - 2);
+          c.restore();
+        }
+      });
+    case "sand":
+      return canvasTexture(scene, "sand", 512, (c, s) => {
+        c.fillStyle = "#e3c78f";
+        c.fillRect(0, 0, s, s);
+        noise(c, s, 14000, (k) => ["#d9b878", "#f0d9a6", "#c9a86a", "#ead1a0"][k % 4]!, 2);
+        c.strokeStyle = "rgba(160,120,60,0.18)";
+        for (let k = 0; k < 6; k++) {
+          c.beginPath();
+          for (let x = 0; x <= s; x += 8) c.lineTo(x, k * 90 + Math.sin(x / 40 + k) * 12);
+          c.stroke();
+        }
+      });
+    case "carpet":
+    case "pinkcarpet":
+      return canvasTexture(scene, kind, 256, (c, s) => {
+        c.fillStyle = kind === "carpet" ? "#5d6f8f" : "#d98aa6";
+        c.fillRect(0, 0, s, s);
+        noise(c, s, 3000, (k) => `rgba(255,255,255,${0.04 + (k % 7) * 0.012})`, 2);
+        noise(c, s, 2000, (k) => `rgba(0,0,0,${0.03 + (k % 5) * 0.01})`, 2);
+      });
+    default:
+      return canvasTexture(scene, "planks", 512, (c) => {
+        for (let i = 0; i < 8; i++) {
+          const shade = 120 + ((i * 37) % 30);
+          c.fillStyle = `rgb(${shade + 50}, ${shade + 5}, ${shade - 45})`;
+          c.fillRect(0, i * 64, 512, 62);
+          c.fillStyle = "rgba(0,0,0,0.22)";
+          c.fillRect(((i * 173) % 400) + 40, i * 64, 3, 62);
+          c.fillStyle = "rgba(0,0,0,0.05)";
+          for (let g = 0; g < 30; g++) c.fillRect((g * 61 + i * 17) % 512, i * 64 + ((g * 13) % 60), 40, 1);
+        }
+      });
   }
-  return canvasTexture(scene, "planks", 512, (c) => {
-    for (let i = 0; i < 8; i++) {
-      const shade = 120 + ((i * 37) % 30);
-      c.fillStyle = `rgb(${shade + 50}, ${shade + 5}, ${shade - 45})`;
-      c.fillRect(0, i * 64, 512, 62);
-      c.fillStyle = "rgba(0,0,0,0.22)";
-      c.fillRect(((i * 173) % 400) + 40, i * 64, 3, 62);
+}
+
+/** Garden dirt path with pebbles; u runs along the track. */
+function dirtTexture(scene: Scene): DynamicTexture {
+  return canvasTexture(scene, "dirt", 512, (c, s) => {
+    c.fillStyle = "#8a6a4a";
+    c.fillRect(0, 0, s, s);
+    noise(c, s, 9000, (k) => ["#7a5a3a", "#9c7a56", "#6b4f33", "#a88a66"][k % 4]!, 3);
+    for (let k = 0; k < 120; k++) {
+      c.fillStyle = ["#b9b5ad", "#9a958c", "#cfcac0"][k % 3]!;
+      c.beginPath();
+      c.ellipse((k * 131) % s, (k * 71) % s, 4 + (k % 4), 3 + (k % 3), k, 0, Math.PI * 2);
+      c.fill();
     }
+    c.fillStyle = "rgba(60,110,50,0.6)";
+    c.fillRect(0, 0, s, 16);
+    c.fillRect(0, s - 16, s, 16);
   });
 }
 

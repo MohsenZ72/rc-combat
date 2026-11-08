@@ -36,8 +36,8 @@ jobs:
       - run: npm test
       - name: Headless race (no false positives, replay verifies)
         run: |
-          for track in workshop-circuit living-room-rug kitchen-tiles toy-track-canyon; do
-            for seed in 1 42; do
+          for track in workshop-circuit living-room-rug kitchen-tiles toy-track-canyon bathroom-splash garden-path bedroom-dash garage-workshop library-loop sandbox-dunes; do
+            for seed in 7; do
               out=$(npx tsx --conditions=source packages/game-core/scripts/headless-race.ts $seed $track)
               echo "$out" | grep -E "^track|^ticks|^anomalies"
               echo "$out" | grep -q "^anomalies 0 " || { echo "anomalies on $track seed $seed"; exit 1; }

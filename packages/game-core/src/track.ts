@@ -7,7 +7,7 @@ export function configForTrack(config: GameConfig, def: TrackDefinition): GameCo
 }
 
 /** Visual setting; the client picks floor, surface, barriers and props from it. */
-export type TrackTheme = "toy-track" | "rug" | "kitchen" | "toy-canyon";
+export type TrackTheme = "toy-track" | "rug" | "kitchen" | "toy-canyon" | "bathroom" | "garden" | "bedroom" | "workshop" | "library" | "sandbox";
 
 export interface TrackDefinition {
   id: string;
