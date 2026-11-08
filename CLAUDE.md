@@ -14,6 +14,9 @@ Project skills (load the one that matches the task):
 | `rc-ui` | screens, HUD, design tokens, 3D look |
 | `rc-web3` | wallet sign-in, escrow, settlement (phase 2–3) |
 | `colyseus` | official Colyseus 0.18 reference (installed from colyseus/skill) |
+| `babylonjs-engine` | Babylon.js API, PBR, shadows, post-processing and performance reference (freshtechbro/claudedesignskills) |
+| `substance-3d-texturing` | PBR channel packing, texture budgets, web export (freshtechbro/claudedesignskills) |
+| `game-art-direction` | art-direction method for the photoreal toy look (zenstory-ai/novel-to-game) |
 
 External skills for the Web3 phases (installed from vetted sources, see `skills-lock.json`):
 

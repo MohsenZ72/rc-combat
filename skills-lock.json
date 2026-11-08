@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "babylonjs-engine": {
+      "source": "freshtechbro/claudedesignskills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/babylonjs-engine/SKILL.md",
+      "computedHash": "8a3ca92ec7e885e3323473031c7d6f08338d5df7c0e0b9b199635f49094e96a3"
+    },
     "build-on-base": {
       "source": "base/skills",
       "sourceType": "github",
@@ -19,6 +25,12 @@
       "skillPath": "plugins/entry-point-analyzer/skills/entry-point-analyzer/SKILL.md",
       "computedHash": "781443b6d6b52b7cf96c9d6771dfbb0fd874620839ff5d101e78f0710036ed74"
     },
+    "game-art-direction": {
+      "source": "zenstory-ai/novel-to-game",
+      "sourceType": "github",
+      "skillPath": "skills/game-art-direction/SKILL.md",
+      "computedHash": "653ce537dc34c646c7a3dcb2f6ace668b76cd3a2e3f12d2d5a44cb0c0ebaeb40"
+    },
     "secure-workflow-guide": {
       "source": "trailofbits/skills",
       "sourceType": "github",
@@ -30,6 +42,12 @@
       "sourceType": "github",
       "skillPath": "plugins/blockchain-web3/skills/solidity-security/SKILL.md",
       "computedHash": "14ce11370490def3e2249ca01891d1b2ce7cecb4450a7ec2a10181ff0ad23d06"
+    },
+    "substance-3d-texturing": {
+      "source": "freshtechbro/claudedesignskills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/substance-3d-texturing/SKILL.md",
+      "computedHash": "2e1dfe5482e4c13337d696a9c42e4bcdd40724b403bdd568670ea08b42800662"
     },
     "token-integration-analyzer": {
       "source": "trailofbits/skills",

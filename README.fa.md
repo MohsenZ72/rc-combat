@@ -122,3 +122,7 @@ npm run dev              # API :3000 · سرور بازی :2567 · کلاینت 
 ریسک تحریم USDC را هم باید جدی گرفت.
 
 </div>
+
+## منابع
+
+متریال‌های اسکن‌شده، HDRIها و مدل‌های سه‌بعدی از [Poly Haven](https://polyhaven.com) با مجوز CC0 هستند؛ فهرست کامل در [apps/client/public/assets/CREDITS.md](apps/client/public/assets/CREDITS.md).

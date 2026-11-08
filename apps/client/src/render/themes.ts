@@ -1,4 +1,5 @@
 import type { TrackTheme } from "@rc/game-core";
+import type { SurfaceId } from "./materials.js";
 
 export type FloorKind = "planks" | "carpet" | "tiles" | "mosaic" | "grass" | "concrete" | "parquet" | "sand" | "pinkcarpet";
 
@@ -21,6 +22,8 @@ export interface ThemeStyle {
   /** Block size [w, h, d] and random height variation (books, stones). */
   block: [number, number, number];
   blockVariation: number;
+  /** Scanned material of the blocks (lacquered wood, stone, book leather). */
+  blockSurface: SurfaceId;
   railColor: string;
   skirt: "none" | "rug" | "wood" | "grass" | "sand";
   pillars: boolean;
@@ -29,21 +32,24 @@ export interface ThemeStyle {
   waterAlpha: number;
   pond: boolean;
   outdoor: boolean;
+  /** Key light (window sun / ceiling lamp) strength. */
   sunIntensity: number;
-  hemiIntensity: number;
+  /** HDRI image-based light strength (render/world.ts loads assets/env/<theme>.hdr). */
+  envIntensity: number;
 }
 
 const base = {
   fogDensity: 0.0012,
   block: [1.6, 2.8, 1.6] as [number, number, number],
   blockVariation: 0,
+  blockSurface: "oak" as SurfaceId,
   waterAlpha: 0.38,
   pond: false,
   outdoor: false,
   pillars: false,
   skirt: "none" as const,
   sunIntensity: 0.9,
-  hemiIntensity: 0.8,
+  envIntensity: 0.8,
 };
 
 export const THEMES: Record<TrackTheme, ThemeStyle> = {
@@ -122,7 +128,7 @@ export const THEMES: Record<TrackTheme, ThemeStyle> = {
     waterAlpha: 0.45,
     pond: true,
     sunIntensity: 1,
-    hemiIntensity: 0.9,
+    envIntensity: 0.9,
   },
   garden: {
     ...base,
@@ -131,6 +137,7 @@ export const THEMES: Record<TrackTheme, ThemeStyle> = {
     fog: "#cde8ff",
     fogDensity: 0.0008,
     floor: "grass",
+    blockSurface: "rock",
     surface: "dirt",
     barrier: "blocks",
     barrierColors: ["#9a958c", "#b9b5ad", "#857f75", "#a8a39a"],
@@ -144,7 +151,7 @@ export const THEMES: Record<TrackTheme, ThemeStyle> = {
     pond: true,
     outdoor: true,
     sunIntensity: 1.25,
-    hemiIntensity: 1,
+    envIntensity: 1,
   },
   bedroom: {
     ...base,
@@ -178,7 +185,7 @@ export const THEMES: Record<TrackTheme, ThemeStyle> = {
     waterAlpha: 0.75,
     pond: true,
     sunIntensity: 0.8,
-    hemiIntensity: 0.75,
+    envIntensity: 0.75,
   },
   library: {
     ...base,
@@ -186,6 +193,7 @@ export const THEMES: Record<TrackTheme, ThemeStyle> = {
     clear: "#1c140f",
     fog: "#2a1f17",
     floor: "parquet",
+    blockSurface: "leather",
     surface: "floor",
     barrier: "blocks",
     barrierColors: ["#7d1f24", "#1e2b4f", "#1f6b4a", "#c0a062", "#5b3a6e", "#d9a441"],
@@ -196,7 +204,7 @@ export const THEMES: Record<TrackTheme, ThemeStyle> = {
     ramp: "#1e2b4f",
     water: "#4fb7ff",
     sunIntensity: 0.75,
-    hemiIntensity: 0.7,
+    envIntensity: 0.7,
   },
   sandbox: {
     ...base,
@@ -218,6 +226,6 @@ export const THEMES: Record<TrackTheme, ThemeStyle> = {
     pond: true,
     outdoor: true,
     sunIntensity: 1.3,
-    hemiIntensity: 1,
+    envIntensity: 1,
   },
 };

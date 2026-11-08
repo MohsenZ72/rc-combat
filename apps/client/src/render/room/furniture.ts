@@ -18,7 +18,7 @@ type G = TransformNode;
 
 export function counterRun(k: Kit, g: G, widthCm: number, opts: { sink?: boolean; dishwasherAt?: number; doorColor?: string; top?: string } = {}): void {
   const door = k.mat(opts.doorColor ?? "#f4f1ea", { spec: 0.3 });
-  const top = k.mat(opts.top ?? "#3b3f45", { spec: 0.6, power: 64 });
+  const top = k.mat(opts.top ?? "#3b3f45", { surface: "granite", rough: 0.35 });
   const handle = k.mat("#c9cdd3", { spec: 1, power: 96 });
   const plinth = k.mat("#2a2d31");
   const w = c(widthCm);
@@ -173,7 +173,7 @@ export function petBowl(k: Kit, g: G, x: number, z: number): void {
 // ------------------------------------------------------------------ living room / bedroom
 
 export function sofa(k: Kit, g: G, color = "#5b6b8c", widthCm = 210): void {
-  const fabric = k.mat(color, { spec: 0.04 });
+  const fabric = k.mat(color, { surface: "velvet" });
   const w = c(widthCm);
   k.box(g, [w, c(40), c(90)], [0, c(22), c(45)], fabric);
   k.box(g, [w, c(50), c(20)], [0, c(62), c(10)], fabric);
@@ -181,9 +181,9 @@ export function sofa(k: Kit, g: G, color = "#5b6b8c", widthCm = 210): void {
   const cushions = Math.round(widthCm / 70);
   for (let i = 0; i < cushions; i++) {
     const x = -w / 2 + c(20) + ((w - c(40)) / cushions) * (i + 0.5);
-    k.box(g, [(w - c(40)) / cushions - c(2), c(14), c(66)], [x, c(49), c(52)], k.mat(color, { spec: 0.06 }));
+    k.box(g, [(w - c(40)) / cushions - c(2), c(14), c(66)], [x, c(49), c(52)], k.mat(color, { surface: "velvet" }));
   }
-  k.sphere(g, c(40), [-w / 2 + c(45), c(70), c(28)], k.mat("#ffc933", { spec: 0.05 }), [1, 1, 0.4]);
+  k.sphere(g, c(40), [-w / 2 + c(45), c(70), c(28)], k.mat("#d9a93a", { surface: "linen" }), [1, 1, 0.4]);
   for (const s of [-1, 1]) for (const z of [12, 80]) k.cyl(g, c(5), c(8), [s * (w / 2 - c(12)), c(1), c(z)], k.mat("#2a1e14"));
 }
 
@@ -203,12 +203,14 @@ export function coffeeTable(k: Kit, g: G): void {
   k.box(g, [c(18), c(2), c(5)], [c(-2), c(76), c(-18)], k.mat("#1c1e22", { spec: 0.6 }));
 }
 
-export function tvStand(k: Kit, g: G): void {
+export function tvStand(k: Kit, g: G, screen = true): void {
   const wood = k.mat("#3b2a1f", { spec: 0.2 });
   k.box(g, [c(160), c(50), c(42)], [0, c(25), c(21)], wood);
-  k.box(g, [c(120), c(70), c(5)], [0, c(98), c(14)], k.mat("#0b0d10", { spec: 1, power: 128 }));
-  k.box(g, [c(114), c(64), c(1)], [0, c(98), c(16.6)], k.mat("#1b3550", { emissive: 0.4, spec: 1 }));
-  k.box(g, [c(30), c(4), c(18)], [0, c(52), c(14)], k.mat("#1c1e22"));
+  if (screen) {
+    k.box(g, [c(120), c(70), c(5)], [0, c(98), c(14)], k.mat("#0b0d10", { spec: 1, power: 128 }));
+    k.box(g, [c(114), c(64), c(1)], [0, c(98), c(16.6)], k.mat("#1b3550", { emissive: 0.4, spec: 1 }));
+    k.box(g, [c(30), c(4), c(18)], [0, c(52), c(14)], k.mat("#1c1e22"));
+  }
   k.box(g, [c(40), c(8), c(20)], [c(-45), c(54), c(22)], k.mat("#2a2d31"));
 }
 
@@ -229,7 +231,7 @@ export function bookshelf(k: Kit, g: G, widthCm = 90, heightCm = 200, wood = "#6
       const bw = c(3 + ((n * 37) % 5));
       const bh = c(22 + ((n * 13) % 10));
       const lean = n % 11 === 0 ? 0.25 : 0;
-      k.box(g, [bw, bh, c(22)], [x + bw / 2, y + c(2.5) + bh / 2, c(16)], k.mat(colors[n % colors.length]!, { spec: 0.15 }), [0, 0, lean]);
+      k.box(g, [bw, bh, c(22)], [x + bw / 2, y + c(2.5) + bh / 2, c(16)], k.mat(colors[n % colors.length]!, { surface: "leather" }), [0, 0, lean]);
       x += bw + c(0.6) + (lean ? c(6) : 0);
       n++;
     }
@@ -244,8 +246,8 @@ export function floorLamp(k: Kit, g: G): void {
 }
 
 export function plant(k: Kit, g: G, x = 0, z = c(25), size = 1): void {
-  k.cyl(g, c(30 * size), c(32 * size), [x, c(16 * size), z], k.mat("#c0603a", { spec: 0.2 }), { top: c(36 * size) });
-  k.cyl(g, c(32 * size), c(2), [x, c(32 * size), z], k.mat("#3b2a1f"));
+  k.cyl(g, c(30 * size), c(32 * size), [x, c(16 * size), z], k.mat("#b4583a", { rough: 0.85, surface: "none" }), { top: c(36 * size) });
+  k.cyl(g, c(32 * size), c(2), [x, c(32 * size), z], k.mat("#3b2a1f", { surface: "dirt" }));
   const leaf = k.mat("#2f7a3d", { spec: 0.3 });
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2;
@@ -264,7 +266,7 @@ export function windowFrame(k: Kit, g: G, wCm: number, hCm: number, sillCm: numb
   k.box(g, [w + c(16), c(4), c(14)], [0, c(sillCm) - c(2), c(7)], frame);
   k.box(g, [c(4), h, c(4)], [0, y, c(2)], frame);
   k.box(g, [w, c(4), c(4)], [0, y, c(2)], frame);
-  const curtain = k.mat("#d9c7a3", { spec: 0.02 });
+  const curtain = k.mat("#d9c7a3", { surface: "linen" });
   for (const s of [-1, 1]) {
     for (let i = 0; i < 4; i++) k.cyl(g, c(10), h + c(30), [s * (w / 2 + c(12 + i * 7)), y + c(5), c(8)], curtain);
   }
@@ -282,8 +284,8 @@ export function door(k: Kit, g: G): void {
 
 export function picture(k: Kit, g: G, wCm: number, hCm: number, yCm: number, art: string): void {
   k.box(g, [c(wCm + 6), c(hCm + 6), c(2)], [0, c(yCm), c(1)], k.mat("#2a1e14", { spec: 0.4 }));
-  k.box(g, [c(wCm), c(hCm), c(1)], [0, c(yCm), c(2.4)], k.mat(art, { spec: 0.2 }));
-  k.sphere(g, c(Math.min(wCm, hCm) * 0.4), [c(wCm * 0.15), c(yCm + hCm * 0.1), c(3)], k.mat("#ffd21a", { emissive: 0.3 }), [1, 1, 0.1]);
+  k.box(g, [c(wCm), c(hCm), c(1)], [0, c(yCm), c(2.4)], k.mat(art, { surface: "linen" }));
+  k.sphere(g, c(Math.min(wCm, hCm) * 0.4), [c(wCm * 0.15), c(yCm + hCm * 0.1), c(3)], k.mat("#e8b81a", { surface: "linen" }), [1, 1, 0.1]);
 }
 
 export function radiator(k: Kit, g: G): void {
@@ -296,12 +298,12 @@ export function bed(k: Kit, g: G, duvet = "#5b8fd9"): void {
   const wood = k.mat("#a0673a", { spec: 0.2 });
   k.box(g, [c(160), c(30), c(205)], [0, c(15), c(102)], wood);
   k.box(g, [c(160), c(100), c(6)], [0, c(50), c(3)], wood);
-  k.box(g, [c(150), c(22), c(195)], [0, c(41), c(102)], k.mat("#f6f3ee", { spec: 0.05 }));
-  k.box(g, [c(156), c(10), c(140)], [0, c(56), c(128)], k.mat(duvet, { spec: 0.04 }));
-  k.box(g, [c(156), c(22), c(8)], [0, c(44), c(198)], k.mat(duvet, { spec: 0.04 }));
-  for (const s of [-1, 1]) k.sphere(g, c(55), [s * c(38), c(60), c(28)], k.mat("#ffffff", { spec: 0.05 }), [1, 0.35, 0.6]);
-  k.sphere(g, c(30), [c(30), c(70), c(60)], k.mat("#c9a07a"), [1, 1, 1]);
-  k.sphere(g, c(20), [c(30), c(92), c(60)], k.mat("#c9a07a"));
+  k.box(g, [c(150), c(22), c(195)], [0, c(41), c(102)], k.mat("#f6f3ee", { surface: "linen" }));
+  k.box(g, [c(156), c(10), c(140)], [0, c(56), c(128)], k.mat(duvet, { surface: "fleece" }));
+  k.box(g, [c(156), c(22), c(8)], [0, c(44), c(198)], k.mat(duvet, { surface: "fleece" }));
+  for (const s of [-1, 1]) k.sphere(g, c(55), [s * c(38), c(60), c(28)], k.mat("#f4f2ee", { surface: "linen" }), [1, 0.35, 0.6]);
+  k.sphere(g, c(30), [c(30), c(70), c(60)], k.mat("#c9a07a", { surface: "fleece" }), [1, 1, 1]);
+  k.sphere(g, c(20), [c(30), c(92), c(60)], k.mat("#c9a07a", { surface: "fleece" }));
 }
 
 export function wardrobe(k: Kit, g: G): void {
@@ -450,7 +452,7 @@ export function shelves(k: Kit, g: G): void {
     const y = c(20 + i * 50);
     k.box(g, [c(120), c(3), c(42)], [0, y, c(22)], steel);
     for (let j = 0; j < 5; j++) {
-      if ((i + j) % 3 === 0) k.box(g, [c(20), c(18), c(26)], [c(-48 + j * 24), y + c(10.5), c(22)], k.mat("#b88a52", { spec: 0.05 }));
+      if ((i + j) % 3 === 0) k.box(g, [c(20), c(18), c(26)], [c(-48 + j * 24), y + c(10.5), c(22)], k.mat("#b88a52", { rough: 0.9, surface: "none" }));
       else k.cyl(g, c(18), c(20), [c(-48 + j * 24), y + c(11.5), c(22)], k.mat(cans[(i + j) % cans.length]!, { spec: 0.7 }));
     }
   }
@@ -493,7 +495,7 @@ export function globe(k: Kit, g: G): void {
 export function bookStack(k: Kit, g: G, n: number): void {
   const colors = ["#7d1f24", "#1e2b4f", "#1f6b4a", "#c0a062", "#5b3a6e", "#d9a441"];
   for (let i = 0; i < n; i++) {
-    k.box(g, [c(28 - (i % 3) * 2), c(5), c(20)], [c((i % 2) * 2), c(2.5 + i * 5), c(20)], k.mat(colors[i % colors.length]!, { spec: 0.15 }), [0, (i * 0.37) % 0.6 - 0.3, 0]);
+    k.box(g, [c(28 - (i % 3) * 2), c(5), c(20)], [c((i % 2) * 2), c(2.5 + i * 5), c(20)], k.mat(colors[i % colors.length]!, { surface: "leather" }), [0, (i * 0.37) % 0.6 - 0.3, 0]);
   }
 }
 
@@ -507,7 +509,7 @@ export function clock(k: Kit, g: G, yCm: number): void {
 // ------------------------------------------------------------------ garden / sandbox (outdoors)
 
 export function tree(k: Kit, g: G, size = 1): void {
-  k.cyl(g, c(30 * size), c(260 * size), [0, c(130 * size), 0], k.mat("#5a3a22", { spec: 0.05 }), { top: c(18 * size), tess: 10 });
+  k.cyl(g, c(30 * size), c(260 * size), [0, c(130 * size), 0], k.mat("#6a5444", { surface: "bark" }), { top: c(18 * size), tess: 10 });
   const leaf = ["#2f7a3d", "#3d8b4a", "#25643a"];
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2;
@@ -522,7 +524,7 @@ export function bush(k: Kit, g: G, size = 1): void {
 
 export function flowerBed(k: Kit, g: G, widthCm: number): void {
   const w = c(widthCm);
-  k.box(g, [w, c(12), c(60)], [0, c(6), c(30)], k.mat("#5a3a22", { spec: 0.02 }));
+  k.box(g, [w, c(12), c(60)], [0, c(6), c(30)], k.mat("#5a3a22", { surface: "dirt" }));
   const petals = ["#e2413b", "#ffc933", "#ff6fb5", "#c45bff", "#ffffff", "#ff7a1a"];
   const n = Math.round(widthCm / 14);
   for (let i = 0; i < n; i++) {
@@ -563,7 +565,7 @@ export function gnome(k: Kit, g: G): void {
 }
 
 export function birdbath(k: Kit, g: G): void {
-  const stone = k.mat("#b9b5ad", { spec: 0.05 });
+  const stone = k.mat("#b9b5ad", { surface: "rock" });
   k.cyl(g, c(30), c(8), [0, c(4), c(30)], stone);
   k.cyl(g, c(12), c(60), [0, c(38), c(30)], stone);
   k.cyl(g, c(56), c(10), [0, c(72), c(30)], stone, { top: c(64) });
@@ -645,7 +647,7 @@ export function toyBlocksTower(k: Kit, g: G, n = 6): void {
 }
 
 export function teddy(k: Kit, g: G): void {
-  const fur = k.mat("#a0673a", { spec: 0.02 });
+  const fur = k.mat("#a0673a", { surface: "fleece" });
   k.sphere(g, c(40), [0, c(22), c(25)], fur, [1, 1.1, 0.9]);
   k.sphere(g, c(30), [0, c(54), c(25)], fur);
   for (const s of [-1, 1]) {

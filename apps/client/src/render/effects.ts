@@ -1,4 +1,4 @@
-import { DynamicTexture, Mesh, MeshBuilder, TransformNode, Vector3, type ParticleSystem, type Scene, type StandardMaterial } from "@babylonjs/core";
+import { DynamicTexture, Mesh, MeshBuilder, TransformNode, Vector3, type ParticleSystem, type Scene, type PBRMaterial } from "@babylonjs/core";
 import { ProjectileKind, type ProjectileSnapshot } from "@rc/shared";
 import type { Track } from "@rc/game-core";
 import { Bursts, flareTexture, trail, type BurstKind } from "./fx/particles.js";
@@ -23,7 +23,7 @@ export class Effects {
   private readonly hints = new Map<number, number>();
   private readonly boxes: TransformNode[] = [];
   private readonly boxBase: number[] = [];
-  private readonly mats: Record<string, StandardMaterial>;
+  private readonly mats: Record<string, PBRMaterial>;
   private readonly bursts: Bursts;
   private readonly tex;
   private readonly owned: TransformNode[] = [];
@@ -34,12 +34,12 @@ export class Effects {
     this.tex = flareTexture(scene);
     this.bursts = new Bursts(scene, this.tex);
     this.mats = {
-      rocketBody: mat(scene, "rocket-body", "#f2f2f2", { specular: 0.8, specularPower: 64 }),
-      rocketNose: mat(scene, "rocket-nose", "#e2413b", { specular: 0.8, specularPower: 64 }),
-      rocketFin: mat(scene, "rocket-fin", "#2a2d31", { specular: 0.4 }),
+      rocketBody: mat(scene, "rocket-body", "#e8e8e6", { rough: 0.3, clearCoat: 0.8 }),
+      rocketNose: mat(scene, "rocket-nose", "#b81d1d", { rough: 0.3, clearCoat: 0.8 }),
+      rocketFin: mat(scene, "rocket-fin", "#2a2d31", { rough: 0.45, metal: 0.6 }),
       exhaust: mat(scene, "rocket-exhaust", "#ffb21a", { emissive: 1, alpha: 0.9 }),
-      bomb: mat(scene, "bomb", "#1b1d22", { specular: 0.9, specularPower: 96 }),
-      fuse: mat(scene, "fuse", "#c9a07a", { specular: 0.1 }),
+      bomb: mat(scene, "bomb", "#16171a", { rough: 0.35, metal: 0.8 }),
+      fuse: mat(scene, "fuse", "#b8956a", { rough: 0.9 }),
       led: mat(scene, "led", "#ff2a2a", { emissive: 1 }),
       bolt: mat(scene, "bolt", "#9feeff", { emissive: 1 }),
       boltCore: mat(scene, "bolt-core", "#ffffff", { emissive: 1 }),
@@ -69,9 +69,9 @@ export class Effects {
     g.strokeText("?", 70, 70);
     g.fillText("?", 70, 70);
     tex.update();
-    const boxMat = mat(this.scene, "itembox", "#ffffff", { specular: 0.6, emissive: 0.25 });
-    boxMat.diffuseTexture = tex;
-    const ribbon = mat(this.scene, "ribbon", "#e2413b", { specular: 0.6 });
+    const boxMat = mat(this.scene, "itembox", "#ffffff", { rough: 0.45 });
+    boxMat.albedoTexture = tex;
+    const ribbon = mat(this.scene, "ribbon", "#c8232c", { rough: 0.3, clearCoat: 0.6 });
     for (const b of this.track.boxes) {
       const node = new TransformNode("itembox", this.scene);
       const h = this.track.heightAt(this.track.project(b.x, b.y).s);

@@ -71,3 +71,9 @@ Short ADRs. Each one has its context, the decision, and its consequences. Add ne
 **Context:** the owner reported the car shaking while driving.
 **Decision:** run input and prediction from the render loop with a fixed-step accumulator; draw the local car between the last two predicted steps; low-pass the body-lean inputs.
 **Consequences:** no 30 Hz stepping or trembling. A hidden tab sends a neutral input (rendering, and therefore input, pauses).
+
+## ADR-016 · Photoreal look: PBR, HDRI lighting, CC0 scans and scanned props
+**Context:** the owner said the game still looked "very, very cartoony" and asked for it to look real and natural. Higgsfield credits were empty, so paid AI generation was not an option.
+**Decision:** switch every material to PBR lit by per-theme HDRIs; replace hand-drawn canvas textures with photo-scanned CC0 materials (Poly Haven) at real-world scale, with detail maps for macro distance; replace most primitive furniture with ~70 photo-scanned CC0 glTF props (Poly Haven), optimised with gltf-transform and instanced; add an HDR post-process stack (ACES, SSAO2, depth of field, cascaded PCF shadows) with an adaptive quality governor. Assets are fetched reproducibly by `npm run assets` (`scripts/fetch-assets.py`) and committed (~60 MB) so the game runs offline and CI needs no network; licences and sources are in `public/assets/CREDITS.md`.
+**Consequences:** realistic rooms with real objects and no new runtime dependency except `@babylonjs/loaders` (lazy chunk). Repository grows by ~60 MB of binary assets (CC0). Cars stay procedural (AI or scanned car meshes fuse wheels and can't be customised). Low-end devices fall back automatically.
+

@@ -20,6 +20,9 @@ Read `docs/design-system.md` (tokens, components, HUD map, art direction, voice)
 * Car hierarchy: root (pose) → body (lean) + wheel pivots (steer) → tyre (spin around local Z) → rim/spokes/hub. Wheels roll by distance / radius.
 * Pool every per-shot or per-effect mesh (`Pool` in `render/effects.ts`); never create meshes per frame.
 * Static geometry: thin instances plus `freezeWorldMatrix()`.
+* Materials: always `mat()` / `pbr()` from `render/materials.ts` (PBR). Use `surface` for scanned looks, `rough`/`metal`/`clearCoat` for the rest; never `StandardMaterial`, never flat emissive to fake light. Freeze static materials.
+* Props: prefer a scanned model (`k.model(g, "Sofa_01", …)`, ids in `room/models.ts`) over primitives. New props or materials: add the Poly Haven id to `scripts/fetch-assets.py`, run `npm run assets`, commit the files and the CREDITS update. CC0 only.
+* Read `docs/design-system.md` → "3D art direction" before changing the look. Installed helpers: `babylonjs-engine` (API/perf), `substance-3d-texturing` (PBR channels, budgets), `game-art-direction`.
 * Check visuals with a headed browser: `window.__rc` exposes the client in dev (move `world.camera` for close-ups).
 
 ## Verify

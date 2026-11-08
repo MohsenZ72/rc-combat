@@ -101,6 +101,15 @@ Below 720 px wide the feed hides, panels tighten, and the item slot shrinks.
 
 ## 3D art direction
 
+**Target: a real macro photograph of real diecast toys in a real house.** Nothing should read as cartoon.
+
+* **Physically based everything** (`render/materials.ts`). Every material is a `PBRMaterial` (albedo, roughness, metalness, clear coat) lit by an HDRI of a real room or garden (`public/assets/env/<theme>.hdr`, Poly Haven CC0), plus one key light with cascaded PCF shadows and a soft bounce fill. Legacy `specular` options are mapped to roughness/metal; only near-mirror greys become bare metal.
+* **Photo-scanned surfaces.** Floors, walls, wood, fabric, leather, stone and bark use CC0 scans (`public/assets/pbr/<id>/`: albedo, greyscale detail for tinting, OpenGL normal, ORM). Kit furniture gets box-projected UVs in metres so scans tile at real size. Brown colours become wood grain automatically; pass `surface` for fabric/leather/stone, or `"none"`.
+* **Macro resolution.** The camera sits at toy height, so floors add a Babylon detail map (fine grain, 12× finer) and natural ground (lawn, sand, dirt, concrete) is shrunk to 30–50 % of real scale for more texels; man-made floors (planks, tiles, parquet) keep real size.
+* **Scanned props** (`render/room/models.ts`, `public/assets/models/*.glb`): ~70 Poly Haven CC0 models (sofa, armchair, stove, microwave, kettle, fruit, rubber ducks, tool chest, barrels, grandfather clock, gnome, planters, stones…) optimised by gltf-transform (quantised, WebP ≤ 1024 px), loaded once per scene and instanced. `Kit.model()` places them in real metres; the track guard re-checks them after they load.
+* **Lens.** HDR pipeline with ACES tone mapping, MSAA ×4, subtle bloom, grain, vignette and a little chromatic aberration; high quality adds SSAO2 contact shadows and depth of field focused on the player's car (miniature look). An adaptive governor sheds SSAO/DoF, then MSAA, then resolution if the frame rate stays under 45 fps. `?gfx=low` (or phones) starts in low.
+* **Cars:** Catmull-Rom smoothed lofts with superellipse sections (no facets), lacquered paint (gloss / metallic flake / pearl iridescence / matte), smoked reflective glass, chrome bumpers and mirrors, chrome/gold/painted rims, rubber tyres.
+
 * **Scale:** the cars are diecast toys; the house is giant (sofa, fridge, table legs, mugs, fruit, toy blocks, toy boxes).
 * **Rooms, not backdrops.** `render/room/` builds each map as a furnished room (furniture kit in `furniture.ts`, layouts in `rooms.ts`): walls with dado line and skirting, windows with curtains, doors, pictures, ceiling lights, furniture against the walls at toy scale (1 cm ≈ 0.72 m), a centre piece where the track leaves space, and thin-instanced floor clutter. Pieces that would touch the racing line are dropped automatically.
 * **Effects** (`render/fx/particles.ts`, pooled): rocket exhaust and smoke trail, fuse sparks on bombs, fire, smoke and debris explosions with camera shake, bolt sparks, EMP arcs, repair sparkles, tyre smoke while drifting, water spray, gift-box item boxes that burst into sparkles.
@@ -109,7 +118,7 @@ Below 720 px wide the feed hides, panels tighten, and the item slot shrinks.
   * *Rug*: a finely tiled Persian-style field with a woven border band; walls of coloured toy building blocks; the rug drapes over cushion hills.
   * *Kitchen*: ceramic tiles continue under the racing line; pastel toy-block walls; water spills; a wooden serving tray section.
   * *Toy canyon*: blue plastic track on yellow stands over carpet, clear guards, a water tray at the bottom.
-* **Cars:** diecast sports cars in three lofted body styles (supercar with wing, muscle, rally), glossy paint (high specular), twin roof stripes, door number roundels, dark glass cabin, emissive head and tail lights, small round torus tyres (scaled before rotation so they stay circular) with chrome 5-spoke rims. Wheels roll by distance; front wheels steer; the body leans out of turns (filtered), squats under throttle and noses up in the air.
+* **Car motion:** wheels roll by distance; front wheels steer; the body leans out of turns (filtered), squats under throttle and noses up in the air.
 * **Feedback:** white flash on hit, cyan tint under EMP, transparent cyan bubble for shield or spawn protection, orange flame for turbo, flipped dark car when wrecked, ghosted at 45% when finished or disconnected.
 
 ## Voice

@@ -1,14 +1,15 @@
-import { MeshBuilder, TransformNode, Vector3, type Mesh, type Scene, type StandardMaterial } from "@babylonjs/core";
+import { MeshBuilder, TransformNode, Vector3, type Mesh, type PBRMaterial, type Scene } from "@babylonjs/core";
 import type { RimColor, RimId, TyreId } from "@rc/shared";
 import { mat } from "../world.js";
 
-const RIM_HEX: Record<RimColor, { hex: string; spec: number; power: number }> = {
-  chrome: { hex: "#e6eaf0", spec: 1, power: 128 },
-  black: { hex: "#1b1d22", spec: 0.6, power: 64 },
-  gold: { hex: "#d4a72c", spec: 1, power: 96 },
-  gunmetal: { hex: "#555c66", spec: 0.8, power: 96 },
-  white: { hex: "#f2f2f2", spec: 0.5, power: 48 },
-  red: { hex: "#d7263d", spec: 0.8, power: 96 },
+/** Rim finishes as physical materials: plated metals vs painted (lacquered) alloys. */
+const RIM_HEX: Record<RimColor, { hex: string; metal: number; rough: number; clearCoat?: number }> = {
+  chrome: { hex: "#f2f4f7", metal: 1, rough: 0.04 },
+  black: { hex: "#141518", metal: 0, rough: 0.3, clearCoat: 1 },
+  gold: { hex: "#e8b84a", metal: 1, rough: 0.14 },
+  gunmetal: { hex: "#5a6068", metal: 1, rough: 0.28 },
+  white: { hex: "#ececea", metal: 0, rough: 0.3, clearCoat: 1 },
+  red: { hex: "#b5121f", metal: 0, rough: 0.28, clearCoat: 1 },
 };
 
 export interface TyreSpec {
@@ -36,7 +37,7 @@ export function buildWheel(scene: Scene, parent: TransformNode, radius: number, 
   const spec = TYRE_SPECS[tyre];
   const r = radius * spec.radiusScale;
   const t = Math.min(spec.thickness, r * 0.6);
-  const rubber = mat(scene, `tyre-${key}`, "#101114", { specular: 0.05 });
+  const rubber = mat(scene, `tyre-${key}`, "#141416", { rough: 0.82, metal: 0 });
   const tyreMesh = MeshBuilder.CreateTorus("tyre", { diameter: r * 2 - t, thickness: t, tessellation: 56 }, scene);
   tyreMesh.scaling.y = spec.width;
   tyreMesh.rotation.x = Math.PI / 2;
@@ -61,13 +62,14 @@ export function buildWheel(scene: Scene, parent: TransformNode, radius: number, 
     wall.rotation.x = Math.PI / 2;
     wall.bakeCurrentTransformIntoVertices();
     wall.position.z = face * 0.95;
-    wall.material = mat(scene, `ww-${key}`, "#f4f4f0", { specular: 0.2 });
+    wall.material = mat(scene, `ww-${key}`, "#e9e7e0", { rough: 0.7 });
     wall.parent = tyreMesh;
   }
 
   const c = RIM_HEX[rimColor];
-  const rimMat = mat(scene, `rim-${rimColor}-${key}`, c.hex, { specular: c.spec, specularPower: c.power });
-  const darkMat = mat(scene, `rimd-${key}`, "#2a2f36", { specular: 0.3 });
+  const rimMat = mat(scene, `rim-${rimColor}-${key}`, c.hex, { metal: c.metal, rough: c.rough, clearCoat: c.clearCoat });
+  rimMat.environmentIntensity = 1.8;
+  const darkMat = mat(scene, `rimd-${key}`, "#24282e", { metal: 0.7, rough: 0.45 });
   const rimR = r - t + 0.03;
   const barrel = MeshBuilder.CreateCylinder("rim-barrel", { diameter: rimR * 2, height: t * spec.width * 0.9, tessellation: 48 }, scene);
   barrel.rotation.x = Math.PI / 2;
@@ -143,22 +145,36 @@ export function buildWheel(scene: Scene, parent: TransformNode, radius: number, 
   return tyreMesh;
 }
 
-export function finishMaterial(m: StandardMaterial, finish: string): void {
+/**
+ * Diecast paint finishes. Real toy cars are enamel over zinc alloy under a
+ * clear lacquer: gloss = solid colour + clear coat, metallic = metal flake +
+ * clear coat, pearl = flake with a colour shift, matte = no lacquer.
+ */
+export function paintFinish(m: PBRMaterial, finish: string): void {
+  m.clearCoat.isEnabled = finish !== "matte";
+  m.clearCoat.intensity = 1;
+  m.clearCoat.roughness = 0.03;
+  m.iridescence.isEnabled = false;
   switch (finish) {
     case "matte":
-      m.specularColor.set(0.06, 0.06, 0.06);
-      m.specularPower = 8;
+      m.metallic = 0;
+      m.roughness = 0.62;
       break;
     case "metallic":
-      m.specularColor.set(1.1, 1.1, 1.1);
-      m.specularPower = 48;
+      m.metallic = 0.75;
+      m.roughness = 0.32;
       break;
     case "pearl":
-      m.specularColor.set(1, 0.95, 1.05);
-      m.specularPower = 160;
+      m.metallic = 0.35;
+      m.roughness = 0.28;
+      m.iridescence.isEnabled = true;
+      m.iridescence.intensity = 0.7;
+      m.iridescence.indexOfRefraction = 1.4;
+      m.iridescence.minimumThickness = 300;
+      m.iridescence.maximumThickness = 600;
       break;
     default:
-      m.specularColor.set(1, 1, 1);
-      m.specularPower = 96;
+      m.metallic = 0;
+      m.roughness = 0.38;
   }
 }

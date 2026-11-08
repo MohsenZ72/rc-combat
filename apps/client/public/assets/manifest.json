@@ -1,0 +1,538 @@
+{
+  "materials": {
+    "laminate": {
+      "source": "laminate_floor_02",
+      "name": "Laminate Floor 02",
+      "sizeCm": [
+        170.0,
+        170.0
+      ]
+    },
+    "carpet": {
+      "source": "poly_wool_herringbone",
+      "name": "Poly Wool Herringbone",
+      "sizeCm": [
+        27.0,
+        27.6
+      ]
+    },
+    "floor-tiles": {
+      "source": "interior_tiles",
+      "name": "Interior Tiles",
+      "sizeCm": [
+        190.0,
+        190.0
+      ]
+    },
+    "mosaic": {
+      "source": "marble_tiles",
+      "name": "Marble Tiles",
+      "sizeCm": [
+        200.0,
+        200.0
+      ]
+    },
+    "lawn": {
+      "source": "leafy_grass",
+      "name": "Leafy Grass",
+      "sizeCm": [
+        200.0,
+        200.0
+      ]
+    },
+    "garage-concrete": {
+      "source": "garage_floor",
+      "name": "Garage Floor",
+      "sizeCm": [
+        188.6,
+        188.6
+      ]
+    },
+    "parquet": {
+      "source": "herringbone_parquet",
+      "name": "Herringbone Parquet",
+      "sizeCm": [
+        340.0,
+        340.0
+      ]
+    },
+    "sand": {
+      "source": "sand_01",
+      "name": "Sand 01",
+      "sizeCm": [
+        150.0,
+        150.0
+      ]
+    },
+    "dirt": {
+      "source": "park_dirt",
+      "name": "Park Dirt",
+      "sizeCm": [
+        300.0,
+        300.0
+      ]
+    },
+    "plaster": {
+      "source": "painted_plaster_wall",
+      "name": "Painted Plaster Wall",
+      "sizeCm": [
+        200.0,
+        200.0
+      ]
+    },
+    "wall-tiles": {
+      "source": "long_white_tiles",
+      "name": "Long White Tiles",
+      "sizeCm": [
+        127.0,
+        127.0
+      ]
+    },
+    "block-wall": {
+      "source": "concrete_block_wall",
+      "name": "Concrete Block Wall",
+      "sizeCm": [
+        200.0,
+        200.0
+      ]
+    },
+    "panelling": {
+      "source": "dark_paneled_wood",
+      "name": "Dark Paneled Wood",
+      "sizeCm": [
+        140.0,
+        140.0
+      ]
+    },
+    "wood": {
+      "source": "kitchen_wood",
+      "name": "Kitchen Wood",
+      "sizeCm": [
+        60.0,
+        60.0
+      ]
+    },
+    "wood-fine": {
+      "source": "fine_grained_wood",
+      "name": "Fine Grained Wood",
+      "sizeCm": [
+        60.0,
+        60.0
+      ]
+    },
+    "oak": {
+      "source": "grey_oak_veneer_01",
+      "name": "Grey Oak Veneer 01",
+      "sizeCm": [
+        100.0,
+        100.0
+      ]
+    },
+    "linen": {
+      "source": "rough_linen",
+      "name": "Rough Linen",
+      "sizeCm": [
+        27.1,
+        27.1
+      ]
+    },
+    "velvet": {
+      "source": "velour_velvet",
+      "name": "Velour Velvet",
+      "sizeCm": [
+        28.4,
+        27.3
+      ]
+    },
+    "fleece": {
+      "source": "knitted_fleece",
+      "name": "Knitted Fleece",
+      "sizeCm": [
+        26.6,
+        27.0
+      ]
+    },
+    "leather": {
+      "source": "brown_leather",
+      "name": "Brown Leather",
+      "sizeCm": [
+        40.0,
+        40.0
+      ]
+    },
+    "bark": {
+      "source": "bark_brown_02",
+      "name": "Bark Brown 02",
+      "sizeCm": [
+        100.0,
+        100.0
+      ]
+    },
+    "rock": {
+      "source": "dry_riverbed_rock",
+      "name": "Dry Riverbed Rock",
+      "sizeCm": [
+        200.0,
+        200.0
+      ]
+    },
+    "granite": {
+      "source": "granite_tile",
+      "name": "Granite Tile",
+      "sizeCm": [
+        230.0,
+        230.0
+      ]
+    }
+  },
+  "environments": {
+    "toy-track": {
+      "source": "empty_play_room",
+      "name": "Empty Play Room",
+      "sky": false
+    },
+    "rug": {
+      "source": "lythwood_lounge",
+      "name": "Lythwood Lounge",
+      "sky": false
+    },
+    "kitchen": {
+      "source": "kiara_interior",
+      "name": "Kiara Interior",
+      "sky": false
+    },
+    "toy-canyon": {
+      "source": "small_empty_room_3",
+      "name": "Small Empty Room 3",
+      "sky": false
+    },
+    "bathroom": {
+      "source": "modern_bathroom",
+      "name": "Modern Bathroom",
+      "sky": false
+    },
+    "garden": {
+      "source": "residential_garden",
+      "name": "Residential Garden",
+      "sky": true
+    },
+    "bedroom": {
+      "source": "hotel_room",
+      "name": "Hotel Room",
+      "sky": false
+    },
+    "workshop": {
+      "source": "garage",
+      "name": "Garage",
+      "sky": false
+    },
+    "library": {
+      "source": "reading_room",
+      "name": "Reading Room",
+      "sky": false
+    },
+    "sandbox": {
+      "source": "air_museum_playground",
+      "name": "Air Museum Playground",
+      "sky": true
+    }
+  },
+  "models": {
+    "Sofa_01": {
+      "name": "Sofa 01",
+      "tris": 4101
+    },
+    "ArmChair_01": {
+      "name": "Arm Chair 01",
+      "tris": 5626
+    },
+    "CoffeeTable_01": {
+      "name": "Coffee Table 01",
+      "tris": 10404
+    },
+    "Ottoman_01": {
+      "name": "Ottoman 01",
+      "tris": 4240
+    },
+    "Television_01": {
+      "name": "Television 01",
+      "tris": 1918
+    },
+    "side_table_01": {
+      "name": "Side Table 01",
+      "tris": 2756
+    },
+    "potted_plant_02": {
+      "name": "Potted Plant 02",
+      "tris": 69806
+    },
+    "potted_plant_04": {
+      "name": "Potted Plant 04",
+      "tris": 6097
+    },
+    "hanging_picture_frame_01": {
+      "name": "Hanging Picture Frame 01",
+      "tris": 2586
+    },
+    "throw_pillows_01": {
+      "name": "Throw Pillows 01",
+      "tris": 6362
+    },
+    "round_wooden_table_01": {
+      "name": "Round Wooden Table 01",
+      "tris": 8640
+    },
+    "dining_chair_02": {
+      "name": "Dining Chair 02",
+      "tris": 22013
+    },
+    "electric_stove": {
+      "name": "Electric Stove",
+      "tris": 13914
+    },
+    "vintage_microwave": {
+      "name": "Vintage Microwave",
+      "tris": 8120
+    },
+    "vintage_electric_kettle": {
+      "name": "Vintage Electric Kettle",
+      "tris": 14838
+    },
+    "food_apple_01": {
+      "name": "Food Apple 01",
+      "tris": 7012
+    },
+    "bananas": {
+      "name": "Bananas",
+      "tris": 46868
+    },
+    "lemon": {
+      "name": "Lemon",
+      "tris": 4012
+    },
+    "tea_set_01": {
+      "name": "Tea Set 01",
+      "tris": 40296
+    },
+    "wooden_cutting_board": {
+      "name": "Wooden Cutting Board",
+      "tris": 3520
+    },
+    "rubber_duck_toy": {
+      "name": "Rubber Duck Toy",
+      "tris": 4288
+    },
+    "football": {
+      "name": "Football",
+      "tris": 4296
+    },
+    "american_football": {
+      "name": "American Football",
+      "tris": 4480
+    },
+    "baseball_01": {
+      "name": "Baseball 01",
+      "tris": 2712
+    },
+    "gamepad": {
+      "name": "Gamepad",
+      "tris": 9546
+    },
+    "Ukulele_01": {
+      "name": "Ukulele 01",
+      "tris": 8912
+    },
+    "alarm_clock_01": {
+      "name": "Alarm Clock 01",
+      "tris": 13006
+    },
+    "painted_wooden_cabinet": {
+      "name": "Painted Wooden Cabinet",
+      "tris": 2227
+    },
+    "painted_wooden_nightstand": {
+      "name": "Painted Wooden Nightstand",
+      "tris": 470
+    },
+    "painted_wooden_chair_01": {
+      "name": "Painted Wooden Chair 01",
+      "tris": 724
+    },
+    "SchoolDesk_01": {
+      "name": "School Desk 01",
+      "tris": 4162
+    },
+    "SchoolChair_01": {
+      "name": "School Chair 01",
+      "tris": 5072
+    },
+    "wooden_stool_01": {
+      "name": "Wooden Stool 01",
+      "tris": 10946
+    },
+    "GreenChair_01": {
+      "name": "Green Chair 01",
+      "tris": 4213
+    },
+    "vintage_cabinet_01": {
+      "name": "Vintage Cabinet 01",
+      "tris": 61096
+    },
+    "desk_lamp_arm_01": {
+      "name": "Desk Lamp Arm 01",
+      "tris": 25710
+    },
+    "ornate_mirror_01": {
+      "name": "Ornate Mirror 01",
+      "tris": 14246
+    },
+    "WetFloorSign_01": {
+      "name": "Wet Floor Sign 01",
+      "tris": 228
+    },
+    "bleach_bottle": {
+      "name": "Bleach Bottle",
+      "tris": 4052
+    },
+    "all_purpose_cleaner": {
+      "name": "All Purpose Cleaner",
+      "tris": 4624
+    },
+    "plunger": {
+      "name": "Plunger",
+      "tris": 3278
+    },
+    "wicker_basket_01": {
+      "name": "Wicker Basket 01",
+      "tris": 22276
+    },
+    "metal_tool_chest": {
+      "name": "Metal Tool Chest",
+      "tris": 14576
+    },
+    "steel_frame_shelves_01": {
+      "name": "Steel Frame Shelves 01",
+      "tris": 4348
+    },
+    "wooden_ladder": {
+      "name": "Wooden Ladder",
+      "tris": 8492
+    },
+    "Barrel_01": {
+      "name": "Barrel_01",
+      "tris": 2682
+    },
+    "Barrel_02": {
+      "name": "Barrel 02",
+      "tris": 2688
+    },
+    "old_tyre": {
+      "name": "Old Tyre",
+      "tris": 2880
+    },
+    "cardboard_box_01": {
+      "name": "Cardboard Box 01",
+      "tris": 16952
+    },
+    "Drill_01": {
+      "name": "Drill 01",
+      "tris": 2926
+    },
+    "bench_vice_01": {
+      "name": "Bench Vice 01",
+      "tris": 2864
+    },
+    "spray_paint_bottles": {
+      "name": "Spray Paint Bottles",
+      "tris": 5040
+    },
+    "metal_jerrycan": {
+      "name": "Metal Jerrycan",
+      "tris": 20022
+    },
+    "portable_generator": {
+      "name": "Portable Generator",
+      "tris": 26419
+    },
+    "tire_pump": {
+      "name": "Tire Pump",
+      "tris": 6572
+    },
+    "wooden_crate_01": {
+      "name": "Wooden Crate 01",
+      "tris": 6576
+    },
+    "book_encyclopedia_set_01": {
+      "name": "Book Encyclopedia Set 01",
+      "tris": 67306
+    },
+    "Rockingchair_01": {
+      "name": "Rockingchair 01",
+      "tris": 11866
+    },
+    "vintage_grandfather_clock_01": {
+      "name": "Vintage Grandfather Clock 01",
+      "tris": 12604
+    },
+    "marble_bust_01": {
+      "name": "Marble Bust 01",
+      "tris": 17456
+    },
+    "vintage_oil_lamp": {
+      "name": "Vintage Oil Lamp",
+      "tris": 7208
+    },
+    "mid_century_lounge_chair": {
+      "name": "Mid Century Lounge Chair",
+      "tris": 6148
+    },
+    "garden_gnome": {
+      "name": "Garden Gnome",
+      "tris": 28858
+    },
+    "planter_box_01": {
+      "name": "Planter Box 01",
+      "tris": 8094
+    },
+    "planter_pot_clay": {
+      "name": "Planter Pot Clay",
+      "tris": 3080
+    },
+    "watering_can_metal_01": {
+      "name": "Watering Can Metal 01",
+      "tris": 11837
+    },
+    "wooden_picnic_table": {
+      "name": "Wooden Picnic Table",
+      "tris": 10210
+    },
+    "painted_wooden_bench": {
+      "name": "Painted Wooden Bench",
+      "tris": 630
+    },
+    "tree_stump_01": {
+      "name": "Tree Stump 01",
+      "tris": 41046
+    },
+    "fern_02": {
+      "name": "Fern 02",
+      "tris": 6232
+    },
+    "shrub_02": {
+      "name": "Shrub 02",
+      "tris": 52317
+    },
+    "stone_01": {
+      "name": "Stone 01",
+      "tris": 71916
+    },
+    "lambis_shell": {
+      "name": "Lambis Shell",
+      "tris": 12498
+    },
+    "wooden_bucket_01": {
+      "name": "Wooden Bucket 01",
+      "tris": 5116
+    }
+  }
+}

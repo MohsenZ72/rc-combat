@@ -1,17 +1,24 @@
 import {
   Color3,
   Color4,
+  CascadedShadowGenerator,
+  DefaultRenderingPipeline,
+  DepthOfFieldEffectBlurLevel,
   DirectionalLight,
   DynamicTexture,
   Engine,
   HemisphericLight,
+  HDRCubeTexture,
+  ImageProcessingConfiguration,
   Matrix,
   Mesh,
   MeshBuilder,
+  PhotoDome,
   Quaternion,
+  SSAO2RenderingPipeline,
   Scene,
   ShadowGenerator,
-  StandardMaterial,
+  PBRMaterial,
   Texture,
   TransformNode,
   UniversalCamera,
@@ -20,26 +27,39 @@ import {
 } from "@babylonjs/core";
 import { Rng, type Track } from "@rc/game-core";
 import { Kit } from "./room/kit.js";
+import { pbr, setTiling, surfaceMetres, scanTexture, type MatOpts, type SurfaceId } from "./materials.js";
 import { buildRoom, roomFor, type Room } from "./room/rooms.js";
 import { THEMES, type FloorKind, type ThemeStyle } from "./themes.js";
 
 /** Game (x, y) on the floor plane → Babylon (x, height, y). */
 export const toWorld = (x: number, y: number, h = 0) => new Vector3(x, h, y);
 
-export function mat(scene: Scene, name: string, hex: string, opts: { emissive?: number; specular?: number; alpha?: number; specularPower?: number } = {}): StandardMaterial {
-  const m = new StandardMaterial(name, scene);
-  const c = Color3.FromHexString(hex);
-  m.diffuseColor = c;
-  m.specularColor = new Color3(opts.specular ?? 0.15, opts.specular ?? 0.15, opts.specular ?? 0.15);
-  if (opts.specularPower) m.specularPower = opts.specularPower;
-  if (opts.emissive) m.emissiveColor = c.scale(opts.emissive);
-  if (opts.alpha !== undefined) m.alpha = opts.alpha;
-  return m;
-}
+/** Physically based material (see render/materials.ts). */
+export const mat = (scene: Scene, name: string, hex: string, opts: MatOpts = {}): PBRMaterial => pbr(scene, name, hex, opts);
 
 const BARRIER_HEIGHT = 2.8; // above the 2.1 m jump apex, so cars visibly can't hop out
 /** World metres covered by one repeat of the rug field pattern. */
 const RUG_TILE = 18;
+
+/**
+ * Render quality. "high" adds ambient occlusion, depth of field and MSAA;
+ * "low" (phones, or `?gfx=low`) keeps PBR + shadows only.
+ */
+export type Gfx = "high" | "low";
+
+function pickGfx(): Gfx {
+  try {
+    const q = new URLSearchParams(location.search).get("gfx");
+    if (q === "low" || q === "high") return q;
+    const saved = localStorage.getItem("rc.gfx");
+    if (saved === "low" || saved === "high") return saved;
+  } catch {
+    // storage blocked: fall through to the device guess
+  }
+  return navigator.maxTouchPoints > 0 && Math.min(screen.width, screen.height) < 900 ? "low" : "high";
+}
+
+const ENV_BASE = `${import.meta.env.BASE_URL}assets/env`;
 
 /** Engine, scene, lights, chase camera and the current themed track. */
 export class World {
@@ -47,13 +67,17 @@ export class World {
   readonly scene: Scene;
   readonly camera: UniversalCamera;
   readonly shadows: ShadowGenerator;
-  private readonly hemi: HemisphericLight;
+  readonly gfx: Gfx = pickGfx();
   private readonly sun: DirectionalLight;
+  private readonly fill: HemisphericLight;
+  private readonly pipeline: DefaultRenderingPipeline;
+  private sky: PhotoDome | null = null;
+  private readonly ssao: { name: string } | null;
   private camPos = new Vector3(0, 30, -30);
   private shakeAmount = 0;
   private camTarget = new Vector3(0, 0, 0);
   private trackRoot: TransformNode | null = null;
-  private waterMats: StandardMaterial[] = [];
+  private waterMats: PBRMaterial[] = [];
   track: Track | null = null;
   theme: ThemeStyle = THEMES["toy-track"];
 
@@ -69,23 +93,107 @@ export class World {
     this.camera.minZ = 0.2;
     this.camera.maxZ = 1600;
     this.camera.inputs.clear();
-    this.hemi = new HemisphericLight("hemi", new Vector3(0.2, 1, 0.1), this.scene);
-    this.hemi.intensity = 0.8;
-    this.hemi.groundColor = new Color3(0.22, 0.18, 0.15);
-    this.sun = new DirectionalLight("lamp", new Vector3(-0.4, -1, 0.3), this.scene);
+    // Light comes mostly from the theme's HDRI (image-based lighting); one key
+    // light (window sun / ceiling lamp) adds direction and the cast shadows.
+    this.sun = new DirectionalLight("key", new Vector3(-0.45, -1, 0.35), this.scene);
     this.sun.position = new Vector3(200, 260, -120);
-    this.shadows = new ShadowGenerator(2048, this.sun);
-    this.shadows.useBlurExponentialShadowMap = true;
-    this.shadows.blurKernel = 12;
-    this.shadows.darkness = 0.4;
+    // Bounce fill: light reflected off the floor onto the ceiling and the undersides of things.
+    this.fill = new HemisphericLight("bounce", new Vector3(0, 1, 0), this.scene);
+    this.fill.diffuse = new Color3(0.95, 0.93, 0.9);
+    this.fill.groundColor = new Color3(0.75, 0.68, 0.6);
+    this.fill.specular = Color3.Black();
+    const high = this.gfx === "high";
+    const csm = new CascadedShadowGenerator(high ? 2048 : 1024, this.sun);
+    csm.numCascades = high ? 3 : 2;
+    csm.lambda = 0.9;
+    csm.shadowMaxZ = 420;
+    csm.stabilizeCascades = true;
+    csm.usePercentageCloserFiltering = true;
+    csm.filteringQuality = high ? ShadowGenerator.QUALITY_HIGH : ShadowGenerator.QUALITY_MEDIUM;
+    csm.bias = 0.004;
+    csm.normalBias = 0.02;
+    csm.darkness = 0;
+    this.shadows = csm;
+
+    const p = new DefaultRenderingPipeline("main", true, this.scene, [this.camera]);
+    p.samples = high ? 4 : 1;
+    p.fxaaEnabled = true;
+    p.imageProcessingEnabled = true;
+    p.imageProcessing.toneMappingEnabled = true;
+    p.imageProcessing.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
+    p.imageProcessing.exposure = 1.1;
+    p.imageProcessing.contrast = 1.1;
+    p.imageProcessing.vignetteEnabled = true;
+    p.imageProcessing.vignetteWeight = 1.6;
+    p.imageProcessing.vignetteStretch = 0.4;
+    p.bloomEnabled = true;
+    p.bloomThreshold = 0.92;
+    p.bloomWeight = 0.22;
+    p.bloomKernel = 48;
+    p.bloomScale = 0.5;
+    p.grainEnabled = true;
+    p.grain.intensity = 3.5;
+    p.grain.animated = true;
+    p.chromaticAberrationEnabled = high;
+    p.chromaticAberration.aberrationAmount = 4;
+    p.sharpenEnabled = true;
+    p.sharpen.edgeAmount = 0.2;
+    if (high) {
+      // Macro-photo look: the diecast car is sharp, the room far behind softens.
+      p.depthOfFieldEnabled = true;
+      p.depthOfFieldBlurLevel = DepthOfFieldEffectBlurLevel.Low;
+      p.depthOfField.focalLength = 30;
+      p.depthOfField.fStop = 3.2;
+      p.depthOfField.lensSize = 50;
+      const ssao = new SSAO2RenderingPipeline("ssao", this.scene, { ssaoRatio: 0.5, blurRatio: 1 }, [this.camera]);
+      ssao.radius = 1.6;
+      ssao.totalStrength = 1.1;
+      ssao.base = 0.15;
+      ssao.samples = 16;
+      ssao.maxZ = 260;
+      ssao.expensiveBlur = true;
+    }
+    this.pipeline = p;
+    this.ssao = high ? this.scene.postProcessRenderPipelineManager.supportedPipelines.find((x) => x.name === "ssao") ?? null : null;
+    this.watchFrameRate();
     window.addEventListener("resize", () => this.engine.resize());
     this.scene.onBeforeRenderObservable.add(() => {
       const t = performance.now() / 1000;
       for (const m of this.waterMats) {
-        const tex = m.diffuseTexture as Texture | null;
-        if (tex) tex.uOffset = (t * 0.03) % 1;
+        const tex = m.bumpTexture as Texture | null;
+        if (tex) {
+          tex.uOffset = (t * 0.015) % 1;
+          tex.vOffset = (t * 0.009) % 1;
+        }
       }
     });
+  }
+
+  /**
+   * Adaptive quality: if the frame rate stays low, shed the most expensive
+   * effects first (ambient occlusion, depth of field), then render resolution.
+   * Never raises quality again mid-session, so it cannot oscillate.
+   */
+  private watchFrameRate(): void {
+    let slow = 0;
+    let step = 0;
+    window.setInterval(() => {
+      if (document.hidden) return;
+      const fps = this.engine.getFps();
+      slow = fps < 45 ? slow + 1 : 0;
+      if (slow < 3) return;
+      slow = 0;
+      if (step === 0 && this.ssao) {
+        this.scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline("ssao", this.camera);
+        this.pipeline.depthOfFieldEnabled = false;
+      } else if (step <= 1) {
+        this.pipeline.samples = 1;
+        this.pipeline.chromaticAberrationEnabled = false;
+      } else if (step <= 3) {
+        this.engine.setHardwareScalingLevel(this.engine.getHardwareScalingLevel() * 1.2);
+      } else return;
+      step++;
+    }, 1000);
   }
 
   /** Ground height under a game position (uses the track's height profile). */
@@ -118,12 +226,19 @@ export class World {
       this.shakeAmount *= Math.exp(-dtSeconds * 8);
     }
     this.camera.setTarget(this.camTarget);
+    this.focusOn(toWorld(x, y, height + 0.5));
+  }
+
+  /** Depth of field focuses on a world point (millimetres in Babylon's lens model). */
+  private focusOn(p: Vector3): void {
+    if (this.pipeline.depthOfFieldEnabled) this.pipeline.depthOfField.focusDistance = Vector3.Distance(this.camera.position, p) * 1000;
   }
 
   /** Fixed product-shot camera: `dist` away at `height`, offset sideways so a side panel doesn't cover the subject. */
   lookAt(x: number, y: number, z: number, dist: number, height: number, side: number): void {
     this.camera.position.copyFrom(toWorld(x + dist * 0.75, y + dist * 0.65 + side, z + height));
     this.camera.setTarget(toWorld(x, y + side * 0.6, z));
+    this.focusOn(toWorld(x, y, z));
   }
 
   /** Overview camera for lobby/results. */
@@ -134,6 +249,7 @@ export class World {
     const cy = track.ys.reduce((a, b) => a + b, 0) / track.count;
     this.camera.position.copyFrom(toWorld(cx + Math.cos(t * 0.05) * 260, cy + Math.sin(t * 0.05) * 260, 150));
     this.camera.setTarget(toWorld(cx, cy, 0));
+    this.focusOn(toWorld(cx, cy, 0));
   }
 
   /** Screen-space position of a world point (for name tags), or null if behind the camera. */
@@ -158,8 +274,9 @@ export class World {
     this.scene.clearColor = Color4.FromHexString(`${this.theme.clear}ff`);
     this.scene.fogColor = Color3.FromHexString(this.theme.fog);
     this.scene.fogDensity = this.theme.fogDensity;
-    this.sun.intensity = this.theme.sunIntensity;
-    this.hemi.intensity = this.theme.hemiIntensity;
+    this.sun.intensity = this.theme.sunIntensity * 3;
+    this.fill.intensity = this.theme.outdoor ? 0.15 : 0.35;
+    this.setEnvironment(track.def.theme, root);
 
     const bounds = trackBounds(track);
     const room = roomFor(bounds, this.theme.outdoor);
@@ -172,7 +289,30 @@ export class World {
     this.buildRamps(track, root);
     this.buildStartLine(track, root);
     // The room around the circuit: walls, windows, furniture, clutter.
-    buildRoom(new Kit(this.scene, root, this.shadows), track, room);
+    const kit = new Kit(this.scene, root, this.shadows);
+    buildRoom(kit, track, room);
+    // Static geometry never changes material state: freezing skips per-frame shader checks.
+    kit.freezeMaterials();
+    for (const m of root.getChildMeshes(false)) if (m.material instanceof PBRMaterial && !this.waterMats.includes(m.material)) m.material.freeze();
+  }
+
+  /** HDRI image-based lighting for the theme; outdoors also the photographed sky. */
+  private setEnvironment(theme: string, root: TransformNode): void {
+    const prev = this.scene.environmentTexture;
+    const env = new HDRCubeTexture(`${ENV_BASE}/${theme}.hdr`, this.scene, 256, false, true, false, true);
+    env.rotationY = 0.6;
+    this.scene.environmentTexture = env;
+    this.scene.environmentIntensity = this.theme.envIntensity * 1.4;
+    prev?.dispose();
+    this.sky?.dispose();
+    this.sky = null;
+    if (this.theme.outdoor) {
+      const dome = new PhotoDome("sky", `${ENV_BASE}/${theme}-sky.webp`, { resolution: 48, size: 3000 }, this.scene);
+      dome.mesh.applyFog = false;
+      dome.mesh.infiniteDistance = true;
+      dome.parent = root;
+      this.sky = dome;
+    }
   }
 
   // ------------------------------------------------------------------ floor + surface
@@ -183,12 +323,8 @@ export class World {
     const d = this.theme.outdoor ? room.y1 - room.y0 + 1600 : room.y1 - room.y0;
     const floor = MeshBuilder.CreateGround("floor", { width: w, height: d }, this.scene);
     floor.position = toWorld((room.x0 + room.x1) / 2, (room.y0 + room.y1) / 2, -0.02);
-    const tex = floorTexture(this.scene, this.theme.floor);
-    tex.uScale = w / FLOOR_TILE[this.theme.floor];
-    tex.vScale = d / FLOOR_TILE[this.theme.floor];
-    const m = mat(this.scene, "floor", "#ffffff", { specular: FLOOR_SPEC[this.theme.floor], specularPower: 48 });
-    m.diffuseTexture = tex;
-    floor.material = m;
+    const size = floorRepeat(this.theme.floor);
+    floor.material = floorMaterial(this.scene, "floor", this.theme.floor, [w / size, d / size]);
     floor.receiveShadows = true;
     floor.parent = root;
 
@@ -200,16 +336,13 @@ export class World {
       const cy = (b.minY + b.maxY) / 2;
       const rug = MeshBuilder.CreateGround("rug", { width: w, height: d }, this.scene);
       rug.position = toWorld(cx, cy, 0.01);
-      const field = mat(this.scene, "rug-field", "#ffffff", { specular: 0.02 });
-      const tex = rugTexture(this.scene);
-      tex.uScale = w / RUG_TILE;
-      tex.vScale = d / RUG_TILE;
-      field.diffuseTexture = tex;
+      const field = rugFabric(this.scene, "rug-field", rugTexture(this.scene));
+      setTiling(field, w / RUG_TILE, d / RUG_TILE);
       rug.material = field;
       rug.receiveShadows = true;
       rug.parent = root;
-      const borderMat = mat(this.scene, "rug-border", "#ffffff", { specular: 0.02 });
-      borderMat.diffuseTexture = rugBorderTexture(this.scene);
+      const borderMat = rugFabric(this.scene, "rug-border", rugBorderTexture(this.scene));
+      setTiling(borderMat, Math.max(w, d) / 18, 1);
       const band = 9;
       for (const [bw, bd, x, y, rot] of [
         [w, band, cx, cy - d / 2 + band / 2, 0],
@@ -220,8 +353,6 @@ export class World {
         const strip = MeshBuilder.CreateGround("rug-border", { width: bw, height: bd }, this.scene);
         strip.position = toWorld(x, y, 0.02);
         strip.rotation.y = rot;
-        const t = borderMat.diffuseTexture as Texture;
-        t.uScale = bw / 18;
         strip.material = borderMat;
         strip.receiveShadows = true;
         strip.parent = root;
@@ -230,13 +361,12 @@ export class World {
     void track;
   }
 
-  private rugMat: StandardMaterial | null = null;
+  private rugMat: PBRMaterial | null = null;
   /** The rug material is disposed with its track; rebuild it for the next one. */
   private rugTrack: Track | null = null;
-  private rugMaterial(): StandardMaterial {
+  private rugMaterial(): PBRMaterial {
     if (this.rugMat && this.rugMat.getScene() === this.scene && this.rugTrack === this.track) return this.rugMat;
-    const m = mat(this.scene, "rug-surface", "#ffffff", { specular: 0.02 });
-    m.diffuseTexture = rugTexture(this.scene);
+    const m = rugFabric(this.scene, "rug-surface", rugTexture(this.scene));
     this.rugMat = m;
     this.rugTrack = this.track;
     return m;
@@ -249,27 +379,26 @@ export class World {
     const path = (pts: typeof left) => pts.map((p) => toWorld(p.x, p.y, p.z + 0.03));
     const uvs: Vector2[] = [];
     const style = this.theme.surface;
+    const floorSize = floorRepeat(this.theme.floor);
+    const dirtSize = surfaceMetres("dirt") * DIRT_SCALE;
     for (const [pts, side] of [[left, 0], [right, 1]] as const) {
       for (const p of pts) {
         if (style === "rug") uvs.push(new Vector2(p.x / RUG_TILE, p.y / RUG_TILE));
         // "floor": the floor pattern simply continues under the racing line — no road at all.
-        else if (style === "floor") uvs.push(new Vector2(p.x / FLOOR_TILE[this.theme.floor], p.y / FLOOR_TILE[this.theme.floor]));
-        else if (style === "dirt") uvs.push(new Vector2(p.s / 14, side));
+        else if (style === "floor") uvs.push(new Vector2(p.x / floorSize, p.y / floorSize));
+        else if (style === "dirt") uvs.push(new Vector2(p.s / dirtSize, (side * track.def.width) / dirtSize));
         else uvs.push(new Vector2(p.s / 8, side));
       }
     }
     const surface = MeshBuilder.CreateRibbon("surface", { pathArray: [path(left), path(right)], uvs, sideOrientation: Mesh.DOUBLESIDE }, this.scene);
-    let m: StandardMaterial;
+    let m: PBRMaterial;
     if (style === "rug") m = this.rugMaterial();
-    else if (style === "floor") {
-      m = mat(this.scene, "surface-floor", "#ffffff", { specular: FLOOR_SPEC[this.theme.floor], specularPower: 48 });
-      m.diffuseTexture = floorTexture(this.scene, this.theme.floor);
-    } else if (style === "dirt") {
-      m = mat(this.scene, "surface-dirt", "#ffffff", { specular: 0.02 });
-      m.diffuseTexture = dirtTexture(this.scene);
-    } else {
-      m = mat(this.scene, `surface-${style}`, "#ffffff", { specular: 0.45, specularPower: 48 });
-      m.diffuseTexture = plasticTrackTexture(this.scene, style === "plastic-orange" ? "#ff7a1a" : "#2f7de1");
+    else if (style === "floor") m = floorMaterial(this.scene, "surface-floor", this.theme.floor, 1);
+    else if (style === "dirt") m = mat(this.scene, "surface-dirt", "#ffffff", { surface: "dirt", tint: false, tiling: 1, detail: 12 });
+    else {
+      // Injection-moulded toy track: smooth, slightly glossy plastic.
+      m = mat(this.scene, `surface-${style}`, "#ffffff", { rough: 0.3 });
+      m.albedoTexture = plasticTrackTexture(this.scene, style === "plastic-orange" ? "#ff6a10" : "#1f6fd6");
     }
     surface.material = m;
     surface.receiveShadows = true;
@@ -279,8 +408,13 @@ export class World {
   /** Sides of raised sections, down to the floor (rug draped over cushions, a wooden tray…). */
   private buildSkirts(track: Track, root: TransformNode): void {
     if (this.theme.skirt === "none" || track.elevationStats().max < 0.05) return;
-    const skirtColors = { wood: "#c98b4e", grass: "#4f9a44", sand: "#d9b878" } as const;
-    const m = this.theme.skirt === "rug" ? this.rugMaterial() : mat(this.scene, `skirt-${this.theme.skirt}`, skirtColors[this.theme.skirt], { specular: 0.05 });
+    const skirtScan = { wood: ["wood", "#b98450"], grass: ["lawn", "#ffffff"], sand: ["sand", "#ffffff"] } as const;
+    let m: PBRMaterial;
+    if (this.theme.skirt === "rug") m = this.rugMaterial();
+    else {
+      const [id, hex] = skirtScan[this.theme.skirt];
+      m = mat(this.scene, `skirt-${this.theme.skirt}`, hex, { surface: id, tint: id === "wood", tiling: [track.length / surfaceMetres(id), 0.1] });
+    }
     for (const side of [1, -1] as const) {
       const edge = track.boundary3(side, -0.01);
       const top = edge.map((p) => toWorld(p.x, p.y, p.z + 0.02));
@@ -301,7 +435,7 @@ export class World {
   /** Low plastic side rails plus a clear guard panel showing where the wall really is. */
   private buildRails(track: Track, root: TransformNode): void {
     const rail = MeshBuilder.CreateBox("rail", { size: 1 }, this.scene);
-    rail.material = mat(this.scene, "rail", this.theme.railColor, { specular: 0.5, specularPower: 48 });
+    rail.material = mat(this.scene, "rail", this.theme.railColor, { rough: 0.3 });
     const guard = MeshBuilder.CreateBox("guard", { size: 1 }, this.scene);
     const gm = mat(this.scene, "guard", "#d8f0ff", { alpha: 0.1, specular: 0.9 });
     gm.backFaceCulling = false;
@@ -329,7 +463,9 @@ export class World {
     const rng = new Rng(track.def.id.length * 31 + 5);
     const bases = this.theme.barrierColors.map((c, i) => {
       const box = MeshBuilder.CreateBox(`block${i}`, { width: bw, height: 1, depth: bd }, this.scene);
-      box.material = mat(this.scene, `block${i}`, c, { specular: 0.25 });
+      // Lacquered wooden toy blocks, stones or leather-bound books, by theme.
+      const id = this.theme.blockSurface;
+      box.material = mat(this.scene, `block${i}`, c, { surface: id, clearCoat: id === "oak" ? 0.7 : 0, tiling: 0.3 });
       box.parent = root;
       return box;
     });
@@ -365,7 +501,7 @@ export class World {
   /** Toy-track stands under raised plastic track. */
   private buildPillars(track: Track, root: TransformNode): void {
     const pillar = MeshBuilder.CreateCylinder("pillar", { diameter: 0.9, height: 1, tessellation: 12 }, this.scene);
-    pillar.material = mat(this.scene, "pillar", "#ffd21a", { specular: 0.4 });
+    pillar.material = mat(this.scene, "pillar", "#f5c400", { rough: 0.35 });
     pillar.parent = root;
     for (let i = 0; i < track.count; i += 6) {
       const z = track.zs[i]!;
@@ -385,9 +521,14 @@ export class World {
 
   private buildWater(track: Track, root: TransformNode): void {
     if (track.waterRanges.length === 0) return;
-    const m = mat(this.scene, "water", this.theme.water, { alpha: this.theme.waterAlpha, specular: 1, specularPower: 96, emissive: 0.1 });
-    m.diffuseTexture = waterTexture(this.scene);
-    m.backFaceCulling = false;
+    // Clear water: almost no colour of its own, a mirror-smooth surface with slow ripples.
+    const m = mat(this.scene, "water", this.theme.water, { alpha: this.theme.waterAlpha, rough: 0.04, metal: 0 });
+    const ripples = scanTexture(this.scene, "plaster", "normal");
+    ripples.uScale = 6;
+    ripples.vScale = 6;
+    ripples.level = 0.35;
+    m.bumpTexture = ripples;
+    m.indexOfRefraction = 1.33;
     this.waterMats.push(m);
     const left = track.boundary3(1, 0.2);
     const right = track.boundary3(-1, 0.2);
@@ -412,7 +553,7 @@ export class World {
   }
 
   private buildRamps(track: Track, root: TransformNode): void {
-    const m = mat(this.scene, "ramp", this.theme.ramp, { specular: 0.3 });
+    const m = mat(this.scene, "ramp", this.theme.ramp, { surface: "wood", clearCoat: 0.5, tiling: 0.15 });
     for (const s of track.rampS) {
       const length = 6;
       const lift = 0.7;
@@ -439,8 +580,8 @@ export class World {
     }
     tex.update();
     const line = MeshBuilder.CreateGround("startline", { width: track.halfWidth * 2, height: 2 }, scene);
-    const m = mat(scene, "checker", "#ffffff", { specular: 0 });
-    m.diffuseTexture = tex;
+    const m = mat(scene, "checker", "#ffffff", { rough: 0.6 });
+    m.albedoTexture = tex;
     line.material = m;
     const angle = Math.atan2(g.ty, g.tx);
     line.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), -angle + Math.PI / 2);
@@ -448,7 +589,7 @@ export class World {
     line.position = toWorld(mid.x, mid.y, z + 0.05);
     line.parent = root;
 
-    const pillarMat = mat(scene, "arch", "#2a3240");
+    const pillarMat = mat(scene, "arch", "#3a3f47", { rough: 0.35, metal: 1 });
     for (const end of [{ x: g.ax, y: g.ay }, { x: g.bx, y: g.by }]) {
       const p = MeshBuilder.CreateBox("arch-pillar", { width: 0.8, height: 7, depth: 0.8 }, scene);
       p.position = toWorld(end.x, end.y, z + 3.5);
@@ -467,8 +608,8 @@ export class World {
     bc.fillText(track.def.name.toUpperCase(), 512, 68);
     bannerTex.update();
     const banner = MeshBuilder.CreatePlane("banner", { width: Math.hypot(g.bx - g.ax, g.by - g.ay), height: 1.6, sideOrientation: Mesh.DOUBLESIDE }, scene);
-    const bm = mat(scene, "banner", "#ffffff", { emissive: 0.4 });
-    bm.diffuseTexture = bannerTex;
+    const bm = mat(scene, "banner", "#ffffff", { rough: 0.7 });
+    bm.albedoTexture = bannerTex;
     banner.material = bm;
     banner.position = toWorld(mid.x, mid.y, z + 6.6);
     banner.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), -angle + Math.PI / 2);
@@ -521,196 +662,131 @@ function canvasTexture(scene: Scene, name: string, size: number, draw: (c: Canva
   return tex;
 }
 
-/** World metres per texture repeat, per floor kind. */
-const FLOOR_TILE: Record<FloorKind, number> = { planks: 24, carpet: 30, tiles: 16, mosaic: 10, grass: 26, concrete: 40, parquet: 18, sand: 30, pinkcarpet: 30 };
-const FLOOR_SPEC: Record<FloorKind, number> = { planks: 0.08, carpet: 0.02, tiles: 0.4, mosaic: 0.5, grass: 0.02, concrete: 0.12, parquet: 0.3, sand: 0.02, pinkcarpet: 0.02 };
+/**
+ * Photo-scanned floor per kind; carpets are tinted greyscale wool. `grain` is
+ * the fine detail layered on top (natural surfaces reuse their own scan).
+ */
+const FLOOR_SCAN: Record<FloorKind, { id: SurfaceId; tint?: string; rough?: number; grain?: SurfaceId; scale?: number }> = {
+  planks: { id: "laminate", grain: "oak" },
+  carpet: { id: "carpet", tint: "#6c7c98" },
+  tiles: { id: "floor-tiles", rough: 0.55, grain: "plaster" },
+  mosaic: { id: "mosaic", rough: 0.5, grain: "plaster" },
+  grass: { id: "lawn", scale: 0.35 },
+  concrete: { id: "garage-concrete", scale: 0.5 },
+  parquet: { id: "parquet", rough: 0.8, grain: "oak" },
+  sand: { id: "sand", scale: 0.35 },
+  pinkcarpet: { id: "carpet", tint: "#d79aae" },
+};
 
-function noise(c: CanvasRenderingContext2D, s: number, n: number, color: (k: number) => string, size = 2): void {
-  for (let k = 0; k < n; k++) {
-    c.fillStyle = color(k);
-    c.fillRect((k * 97 + ((k * k) % 13)) % s, (k * 57 + ((k * 7) % 11)) % s, size, size);
-  }
+/**
+ * World metres per floor texture repeat. Man-made floors keep their real
+ * size (a plank must look like a plank); natural ground has no fixed scale,
+ * so it is shrunk to get more texels where the toy-height camera looks.
+ */
+const floorRepeat = (kind: FloorKind): number => surfaceMetres(FLOOR_SCAN[kind].id) * (FLOOR_SCAN[kind].scale ?? 1);
+/** Same idea for the garden's dirt path. */
+const DIRT_SCALE = 0.3;
+
+function floorMaterial(scene: Scene, name: string, kind: FloorKind, tiling: number | [number, number]): PBRMaterial {
+  const f = FLOOR_SCAN[kind];
+  return pbr(scene, name, f.tint ?? "#ffffff", { surface: f.id, tint: f.tint !== undefined, rough: f.rough, tiling, detail: 12, detailSurface: f.grain });
 }
 
-function floorTexture(scene: Scene, kind: FloorKind): DynamicTexture {
-  switch (kind) {
-    case "tiles":
-      return canvasTexture(scene, "tiles", 512, (c, s) => {
-        c.fillStyle = "#b9c2c9";
-        c.fillRect(0, 0, s, s);
-        const t = s / 2;
-        for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
-          c.fillStyle = (i + j) % 2 === 0 ? "#f4f6f8" : "#dfe9ee";
-          c.fillRect(i * t + 4, j * t + 4, t - 8, t - 8);
-          c.fillStyle = "rgba(255,255,255,0.35)";
-          c.fillRect(i * t + 10, j * t + 10, t * 0.35, 6);
-        }
-      });
-    case "mosaic":
-      return canvasTexture(scene, "mosaic", 512, (c, s) => {
-        c.fillStyle = "#e9f2f4";
-        c.fillRect(0, 0, s, s);
-        const n = 8;
-        const t = s / n;
-        const cols = ["#9fd0d8", "#bfe3e8", "#7fbfca", "#d9eef2", "#ffffff"];
-        for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-          c.fillStyle = cols[(i * 7 + j * 3) % cols.length]!;
-          c.fillRect(i * t + 3, j * t + 3, t - 6, t - 6);
-        }
-      });
-    case "grass":
-      return canvasTexture(scene, "grass", 512, (c, s) => {
-        c.fillStyle = "#4f9a44";
-        c.fillRect(0, 0, s, s);
-        noise(c, s, 9000, (k) => ["#5aa84a", "#3f8f3a", "#6bb85a", "#467f3c"][k % 4]!, 3);
-        c.strokeStyle = "rgba(30,70,25,0.35)";
-        for (let k = 0; k < 800; k++) {
-          const x = (k * 131) % s;
-          const y = (k * 71) % s;
-          c.beginPath();
-          c.moveTo(x, y);
-          c.lineTo(x + ((k % 5) - 2), y - 7);
-          c.stroke();
-        }
-      });
-    case "concrete":
-      return canvasTexture(scene, "concrete", 512, (c, s) => {
-        c.fillStyle = "#8d9196";
-        c.fillRect(0, 0, s, s);
-        noise(c, s, 12000, (k) => `rgba(${k % 2 ? 255 : 0},${k % 2 ? 255 : 0},${k % 2 ? 255 : 0},${0.04 + (k % 5) * 0.012})`, 2);
-        c.strokeStyle = "rgba(40,40,40,0.35)";
-        c.lineWidth = 2;
-        c.beginPath();
-        c.moveTo(0, s * 0.5);
-        c.lineTo(s, s * 0.5);
-        c.moveTo(s * 0.5, 0);
-        c.lineTo(s * 0.5, s);
-        c.stroke();
-        c.strokeStyle = "rgba(30,30,30,0.25)";
-        c.beginPath();
-        c.moveTo(s * 0.2, s * 0.1);
-        c.lineTo(s * 0.26, s * 0.22);
-        c.lineTo(s * 0.24, s * 0.33);
-        c.stroke();
-      });
-    case "parquet":
-      return canvasTexture(scene, "parquet", 512, (c, s) => {
-        c.fillStyle = "#7a4a2a";
-        c.fillRect(0, 0, s, s);
-        const w = s / 8;
-        const l = s / 2;
-        const shades = ["#8a5a36", "#9c6d48", "#7a4a2a", "#a87a52"];
-        for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++) {
-          c.save();
-          c.translate(i * w + (j % 2 ? w / 2 : 0), j * (l / 2));
-          c.rotate(j % 2 ? Math.PI / 4 : -Math.PI / 4);
-          c.fillStyle = shades[(i + j) % shades.length]!;
-          c.fillRect(-w / 2, -l / 4, w - 2, l / 2 - 2);
-          c.restore();
-        }
-      });
-    case "sand":
-      return canvasTexture(scene, "sand", 512, (c, s) => {
-        c.fillStyle = "#e3c78f";
-        c.fillRect(0, 0, s, s);
-        noise(c, s, 14000, (k) => ["#d9b878", "#f0d9a6", "#c9a86a", "#ead1a0"][k % 4]!, 2);
-        c.strokeStyle = "rgba(160,120,60,0.18)";
-        for (let k = 0; k < 6; k++) {
-          c.beginPath();
-          for (let x = 0; x <= s; x += 8) c.lineTo(x, k * 90 + Math.sin(x / 40 + k) * 12);
-          c.stroke();
-        }
-      });
-    case "carpet":
-    case "pinkcarpet":
-      return canvasTexture(scene, kind, 256, (c, s) => {
-        c.fillStyle = kind === "carpet" ? "#5d6f8f" : "#d98aa6";
-        c.fillRect(0, 0, s, s);
-        noise(c, s, 3000, (k) => `rgba(255,255,255,${0.04 + (k % 7) * 0.012})`, 2);
-        noise(c, s, 2000, (k) => `rgba(0,0,0,${0.03 + (k % 5) * 0.01})`, 2);
-      });
-    default:
-      return canvasTexture(scene, "planks", 512, (c) => {
-        for (let i = 0; i < 8; i++) {
-          const shade = 120 + ((i * 37) % 30);
-          c.fillStyle = `rgb(${shade + 50}, ${shade + 5}, ${shade - 45})`;
-          c.fillRect(0, i * 64, 512, 62);
-          c.fillStyle = "rgba(0,0,0,0.22)";
-          c.fillRect(((i * 173) % 400) + 40, i * 64, 3, 62);
-          c.fillStyle = "rgba(0,0,0,0.05)";
-          for (let g = 0; g < 30; g++) c.fillRect((g * 61 + i * 17) % 512, i * 64 + ((g * 13) % 60), 40, 1);
-        }
-      });
-  }
+/** Woven rug: the pattern as colour, wool weave as normal/roughness. */
+function rugFabric(scene: Scene, name: string, pattern: Texture): PBRMaterial {
+  const m = pbr(scene, name, "#ffffff", { surface: "carpet", tint: false, tiling: 1 });
+  m.albedoTexture = pattern;
+  m.metallic = 0;
+  return m;
 }
 
-/** Garden dirt path with pebbles; u runs along the track. */
-function dirtTexture(scene: Scene): DynamicTexture {
-  return canvasTexture(scene, "dirt", 512, (c, s) => {
-    c.fillStyle = "#8a6a4a";
-    c.fillRect(0, 0, s, s);
-    noise(c, s, 9000, (k) => ["#7a5a3a", "#9c7a56", "#6b4f33", "#a88a66"][k % 4]!, 3);
-    for (let k = 0; k < 120; k++) {
-      c.fillStyle = ["#b9b5ad", "#9a958c", "#cfcac0"][k % 3]!;
-      c.beginPath();
-      c.ellipse((k * 131) % s, (k * 71) % s, 4 + (k % 4), 3 + (k % 3), k, 0, Math.PI * 2);
-      c.fill();
-    }
-    c.fillStyle = "rgba(60,110,50,0.6)";
-    c.fillRect(0, 0, s, 16);
-    c.fillRect(0, s - 16, s, 16);
-  });
-}
-
-/** Persian-style rug field: one tileable medallion repeat (fine detail, repeats every RUG_TILE m). */
+/**
+ * Persian-style rug field, one tileable repeat (RUG_TILE m): a madder-red
+ * ground with a lattice of small flowers and vines in muted wool dyes, then
+ * per-pixel fibre noise and abrash (slow dye-lot banding) so it reads as wool.
+ */
 function rugTexture(scene: Scene): DynamicTexture {
-  return canvasTexture(scene, "rug", 512, (c, s) => {
-    c.fillStyle = "#7d1f24";
+  return canvasTexture(scene, "rug", 1024, (c, s) => {
+    c.fillStyle = "#6a1f22";
     c.fillRect(0, 0, s, s);
-    const h = s / 2;
-    for (const [ox, oy] of [[0, 0], [h, h]] as const) {
-      for (const [dx, dy] of [[0, 0], [s, 0], [0, s], [s, s]] as const) {
-        const x = ox + dx;
-        const y = oy + dy;
-        c.fillStyle = "#b8862f";
+    const cell = s / 4;
+    const motif = (x: number, y: number) => {
+      // Lattice diamond in navy, outlined in ivory.
+      c.save();
+      c.translate(x, y);
+      c.strokeStyle = "rgba(214,196,158,0.55)";
+      c.lineWidth = 5;
+      c.fillStyle = "#24304a";
+      c.beginPath();
+      c.moveTo(0, -cell * 0.32);
+      c.lineTo(cell * 0.32, 0);
+      c.lineTo(0, cell * 0.32);
+      c.lineTo(-cell * 0.32, 0);
+      c.closePath();
+      c.fill();
+      c.stroke();
+      // Eight-petal rosette.
+      for (let i = 0; i < 8; i++) {
+        c.rotate(Math.PI / 4);
+        c.fillStyle = i % 2 ? "#b98d4a" : "#c9b48a";
         c.beginPath();
-        c.moveTo(x, y - h * 0.8);
-        c.lineTo(x + h * 0.8, y);
-        c.lineTo(x, y + h * 0.8);
-        c.lineTo(x - h * 0.8, y);
-        c.closePath();
+        c.ellipse(0, cell * 0.13, cell * 0.035, cell * 0.08, 0, 0, Math.PI * 2);
         c.fill();
-        c.fillStyle = "#1e2b4f";
+      }
+      c.fillStyle = "#7d2a24";
+      c.beginPath();
+      c.arc(0, 0, cell * 0.05, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+    };
+    for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) motif(i * cell, j * cell);
+    // Vines joining the lattice.
+    c.strokeStyle = "rgba(185,141,74,0.6)";
+    c.lineWidth = 3;
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      const x = i * cell + cell / 2;
+      const y = j * cell + cell / 2;
+      c.beginPath();
+      for (let k = 0; k <= 24; k++) {
+        const t = (k / 24) * Math.PI * 2;
+        c.lineTo(x + Math.cos(t) * cell * 0.22, y + Math.sin(t * 2) * cell * 0.08);
+      }
+      c.stroke();
+      c.fillStyle = "#3f5a4a";
+      for (const [dx, dy] of [[-0.22, 0], [0.22, 0], [0, -0.1], [0, 0.1]] as const) {
         c.beginPath();
-        c.moveTo(x, y - h * 0.55);
-        c.lineTo(x + h * 0.55, y);
-        c.lineTo(x, y + h * 0.55);
-        c.lineTo(x - h * 0.55, y);
-        c.closePath();
-        c.fill();
-        c.fillStyle = "#e8d6b0";
-        c.beginPath();
-        c.arc(x, y, h * 0.18, 0, Math.PI * 2);
+        c.ellipse(x + dx * cell, y + dy * cell, 7, 4, dx ? 0.6 : -0.6, 0, Math.PI * 2);
         c.fill();
       }
     }
-    // Woven speckle so it reads as fabric up close.
-    for (let k = 0; k < 3000; k++) {
-      c.fillStyle = `rgba(0,0,0,${0.04 + (k % 5) * 0.012})`;
-      c.fillRect((k * 131) % s, (k * 71) % s, 2, 2);
+    // Fibre noise and abrash.
+    const img = c.getImageData(0, 0, s, s);
+    const d = img.data;
+    let seed = 1234567;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    for (let y = 0; y < s; y++) {
+      const band = 1 + Math.sin((y / s) * Math.PI * 6) * 0.04;
+      for (let x = 0; x < s; x++) {
+        const i = (y * s + x) * 4;
+        const n = (0.86 + rnd() * 0.22) * band;
+        d[i] = Math.min(255, d[i]! * n);
+        d[i + 1] = Math.min(255, d[i + 1]! * n);
+        d[i + 2] = Math.min(255, d[i + 2]! * n);
+      }
     }
+    c.putImageData(img, 0, 0);
   });
 }
 
 /** Woven border band for the rug edges (repeats along its length). */
 function rugBorderTexture(scene: Scene): DynamicTexture {
   return canvasTexture(scene, "rug-border", 256, (c, s) => {
-    c.fillStyle = "#1e2b4f";
+    c.fillStyle = "#24304a";
     c.fillRect(0, 0, s, s);
-    c.fillStyle = "#d9a441";
+    c.fillStyle = "#b98d4a";
     c.fillRect(0, s * 0.18, s, s * 0.1);
     c.fillRect(0, s * 0.72, s, s * 0.1);
-    c.fillStyle = "#7d1f24";
+    c.fillStyle = "#6a1f22";
     for (let x = 0; x < s; x += s / 4) {
       c.beginPath();
       c.moveTo(x + s / 8, s * 0.32);
@@ -736,21 +812,5 @@ function plasticTrackTexture(scene: Scene, color: string): DynamicTexture {
     c.fillRect(0, s - 14, s, 8);
     c.fillStyle = "rgba(0,0,0,0.25)";
     c.fillRect(s - 3, 0, 3, s); // piece joint every 8 m
-  });
-}
-
-function waterTexture(scene: Scene): DynamicTexture {
-  return canvasTexture(scene, "water", 256, (c, s) => {
-    c.fillStyle = "#ffffff";
-    c.fillRect(0, 0, s, s);
-    for (let k = 0; k < 60; k++) {
-      c.strokeStyle = `rgba(160,220,255,${0.3 + (k % 5) * 0.08})`;
-      c.lineWidth = 2;
-      c.beginPath();
-      const y = (k * 37) % s;
-      c.moveTo(0, y);
-      c.bezierCurveTo(s * 0.3, y - 8, s * 0.6, y + 8, s, y);
-      c.stroke();
-    }
   });
 }

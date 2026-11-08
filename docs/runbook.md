@@ -26,6 +26,7 @@ Open <http://localhost:5173>, enter a racer name, press **Find a race**. With th
 | `npm run typecheck` | strict TypeScript everywhere |
 | `npm run build` | production builds (`dist/` per app, client in `apps/client/dist`) |
 | `npm run loadtest -- --clients 100 --seconds 60` | load test against a running stack |
+| `npm run assets` | re-fetch the CC0 materials, HDRIs and scanned props from Poly Haven into `apps/client/public/assets` (already committed; needs Python 3 with Pillow and numpy, `cwebp`, and `npm install` for gltf-transform; add `--force` to rebuild) |
 | `npx tsx --conditions=source packages/game-core/scripts/headless-race.ts 42` | 10-bot race without networking (balance, false positives, replay check) |
 
 ## Environment

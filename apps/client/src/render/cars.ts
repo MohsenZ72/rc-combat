@@ -1,36 +1,60 @@
-import { Color3, Mesh, MeshBuilder, TransformNode, Vector3, type Scene, type StandardMaterial } from "@babylonjs/core";
+import { Color3, Mesh, MeshBuilder, TransformNode, Vector3, type Scene, type PBRMaterial } from "@babylonjs/core";
 import { CAR_FLAG, DEFAULT_COSMETICS, type Cosmetics } from "@rc/shared";
 import { BODY_DEFS, type Station } from "./car/bodies.js";
 import { liveryTexture } from "./car/livery.js";
-import { buildWheel, finishMaterial, TYRE_SPECS } from "./car/wheels.js";
+import { buildWheel, paintFinish, TYRE_SPECS } from "./car/wheels.js";
 import { mat, toWorld, type World } from "./world.js";
 
 const MAX_STEER_VISUAL = 0.45;
 
 /** Rounded cross-section (underside → one side → roof → other side), car-local (y up, z sideways). */
+const SECTION_POINTS = 36;
 function section(st: Station): Vector3[] {
   const { x, hw, bottom, top } = st;
-  const mid = bottom + (top - bottom) * 0.55;
-  const pts: [number, number][] = [
-    [0, bottom],
-    [hw * 0.8, bottom],
-    [hw, bottom + (top - bottom) * 0.2],
-    [hw, mid],
-    [hw * 0.92, top - (top - bottom) * 0.12],
-    [hw * 0.6, top],
-    [0, top + 0.01],
-    [-hw * 0.6, top],
-    [-hw * 0.92, top - (top - bottom) * 0.12],
-    [-hw, mid],
-    [-hw, bottom + (top - bottom) * 0.2],
-    [-hw * 0.8, bottom],
-    [0, bottom],
-  ];
-  return pts.map(([z, y]) => new Vector3(x, y, z));
+  // Superellipse: nearly flat floor, softly rounded shoulders, a little tumblehome towards the roof.
+  const yc = bottom + (top - bottom) * 0.42;
+  const pts: Vector3[] = [];
+  for (let i = 0; i <= SECTION_POINTS; i++) {
+    const a = -Math.PI / 2 + (i / SECTION_POINTS) * Math.PI * 2;
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    const upper = sn > 0;
+    const pz = upper ? 2.8 : 7;
+    const py = upper ? 2.4 : 7;
+    const z = Math.sign(c) * Math.pow(Math.abs(c), 2 / pz) * hw * (upper ? 1 - 0.12 * sn : 1);
+    const y = yc + Math.sign(sn) * Math.pow(Math.abs(sn), 2 / py) * (upper ? top - yc : yc - bottom);
+    pts.push(new Vector3(x, y, z));
+  }
+  return pts;
+}
+
+/** Catmull-Rom between the hand-placed stations so the body flows instead of looking faceted. */
+function smooth(stations: Station[], steps = 5): Station[] {
+  const out: Station[] = [];
+  const keys = ["x", "hw", "bottom", "top"] as const;
+  for (let i = 0; i < stations.length - 1; i++) {
+    const p0 = stations[Math.max(0, i - 1)]!;
+    const p1 = stations[i]!;
+    const p2 = stations[i + 1]!;
+    const p3 = stations[Math.min(stations.length - 1, i + 2)]!;
+    for (let k = 0; k < steps; k++) {
+      const t = k / steps;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const st = {} as Station;
+      for (const key of keys) {
+        st[key] = 0.5 * (2 * p1[key] + (-p0[key] + p2[key]) * t + (2 * p0[key] - 5 * p1[key] + 4 * p2[key] - p3[key]) * t2 + (-p0[key] + 3 * p1[key] - 3 * p2[key] + p3[key]) * t3);
+      }
+      st.hw = Math.max(0.02, st.hw);
+      out.push(st);
+    }
+  }
+  out.push(stations[stations.length - 1]!);
+  return out;
 }
 
 function loft(name: string, stations: Station[], scene: Scene): Mesh {
-  return MeshBuilder.CreateRibbon(name, { pathArray: stations.map(section), sideOrientation: Mesh.DOUBLESIDE }, scene);
+  return MeshBuilder.CreateRibbon(name, { pathArray: smooth(stations).map(section), sideOrientation: Mesh.DOUBLESIDE }, scene);
 }
 
 interface Wheel {
@@ -50,7 +74,7 @@ interface Wheel {
 export class CarView {
   readonly root: TransformNode;
   private readonly body: TransformNode;
-  private readonly paint: StandardMaterial;
+  private readonly paint: PBRMaterial;
   private readonly wheels: Wheel[] = [];
   private readonly shield: Mesh;
   private readonly flame: Mesh;
@@ -62,6 +86,8 @@ export class CarView {
   private accelF = 0;
   private yawF = 0;
   private flashUntil = 0;
+  private paintState = -1;
+  private readonly paintRough: number;
 
   constructor(world: World, readonly key: string, readonly cosmetics: Cosmetics = DEFAULT_COSMETICS) {
     const scene = world.scene;
@@ -70,23 +96,28 @@ export class CarView {
     this.body = new TransformNode(`body-${key}`, scene);
     this.body.parent = this.root;
 
-    this.paint = mat(scene, `paint-${key}`, "#ffffff", { specular: 1, specularPower: 96 });
-    finishMaterial(this.paint, cosmetics.finish);
-    this.paint.diffuseTexture = liveryTexture(scene, key, cosmetics);
+    this.paint = mat(scene, `paint-${key}`, "#ffffff");
+    paintFinish(this.paint, cosmetics.finish);
+    // Lacquered diecast catches the room's reflections more than furniture does.
+    this.paint.environmentIntensity = 1.15;
+    this.paintRough = this.paint.roughness ?? 0.3;
+    this.paint.albedoTexture = liveryTexture(scene, key, cosmetics);
     const shell = loft("shell", def.shell, scene);
     shell.material = this.paint;
     shell.parent = this.body;
 
-    const glass = mat(scene, `glass-${key}`, "#1a2433", { specular: 1, specularPower: 128, alpha: 0.9 });
+    const glass = mat(scene, `glass-${key}`, "#16202a", { rough: 0.03, metal: 0, alpha: 0.7 });
+    glass.environmentIntensity = 2.4;
     const cabin = loft("cabin", def.cabin, scene);
     cabin.material = glass;
     cabin.parent = this.body;
     world.shadows.addShadowCaster(shell);
     world.shadows.addShadowCaster(cabin);
 
-    const accent = mat(scene, `accent-${key}`, cosmetics.accent, { specular: 0.6 });
-    const trim = mat(scene, `trim-${key}`, "#1b1d22", { specular: 0.3 });
+    const accent = mat(scene, `accent-${key}`, cosmetics.accent, { rough: 0.3, clearCoat: 0.8 });
+    const trim = mat(scene, `trim-${key}`, "#16171b", { rough: 0.55 });
     this.addLights(scene, def.shell, key);
+    this.addBumpers(scene, def.shell, key);
     this.addExtras(scene, def, accent, trim);
 
     for (const [x, z] of [[def.wheelX[0], def.wheelZ], [def.wheelX[0], -def.wheelZ], [def.wheelX[1], def.wheelZ], [def.wheelX[1], -def.wheelZ]] as const) {
@@ -102,7 +133,7 @@ export class CarView {
     this.body.position.y = Math.max(0, def.wheelRadius * (TYRE_SPECS[cosmetics.tyres].radiusScale - 1));
 
     this.shield = MeshBuilder.CreateSphere("shield", { diameter: 3.8, segments: 20 }, scene);
-    this.shield.material = mat(scene, `shieldm-${key}`, "#2fd3ff", { emissive: 0.6, alpha: 0.24 });
+    this.shield.material = mat(scene, `shieldm-${key}`, "#2fd3ff", { emissive: 0.5, alpha: 0.18, rough: 0.05 });
     this.shield.parent = this.root;
     this.shield.position.y = 0.7;
     this.shield.isVisible = false;
@@ -118,8 +149,8 @@ export class CarView {
   private addLights(scene: Scene, shell: Station[], key: string): void {
     const nose = shell[shell.length - 2]!;
     const tail = shell[1]!;
-    const headMat = mat(scene, `head-${key}`, "#fff6d6", { emissive: 0.9 });
-    const tailMat = mat(scene, `tail-${key}`, "#ff2a2a", { emissive: 0.8 });
+    const headMat = mat(scene, `head-${key}`, "#fff6d6", { emissive: 0.7, rough: 0.05 });
+    const tailMat = mat(scene, `tail-${key}`, "#d0101a", { emissive: 0.35, rough: 0.05 });
     for (const zSide of [1, -1]) {
       const head = MeshBuilder.CreateBox("headlight", { width: 0.06, height: 0.09, depth: 0.24 }, scene);
       head.material = headMat;
@@ -132,9 +163,29 @@ export class CarView {
     }
   }
 
-  private addExtras(scene: Scene, def: (typeof BODY_DEFS)[keyof typeof BODY_DEFS], accent: StandardMaterial, trim: StandardMaterial): void {
+  /** Chrome bumpers front and back plus wing mirrors, as on real diecast. */
+  private addBumpers(scene: Scene, shell: Station[], key: string): void {
+    const chrome = mat(scene, `chrome-${key}`, "#eef1f4", { metal: 1, rough: 0.06 });
+    const nose = shell[shell.length - 2]!;
+    const tail = shell[1]!;
+    for (const [st, dx] of [[nose, 0.05], [tail, -0.05]] as const) {
+      const b = MeshBuilder.CreateCapsule("bumper", { radius: 0.06, height: st.hw * 2 * 0.92, orientation: new Vector3(0, 0, 1), tessellation: 12 }, scene);
+      b.position.set(st.x + dx, st.bottom + 0.1, 0);
+      b.material = chrome;
+      b.parent = this.body;
+    }
+    const mid = shell[Math.floor(shell.length / 2)]!;
+    for (const z of [1, -1]) {
+      const m = MeshBuilder.CreateBox("mirror", { width: 0.12, height: 0.08, depth: 0.14 }, scene);
+      m.position.set(mid.x + 0.35, mid.top - 0.02, z * (mid.hw + 0.06));
+      m.material = chrome;
+      m.parent = this.body;
+    }
+  }
+
+  private addExtras(scene: Scene, def: (typeof BODY_DEFS)[keyof typeof BODY_DEFS], accent: PBRMaterial, trim: PBRMaterial): void {
     const roof = def.cabin.reduce((a, s) => Math.max(a, s.top), 0);
-    const box = (w: number, h: number, d: number, x: number, y: number, z: number, m: StandardMaterial) => {
+    const box = (w: number, h: number, d: number, x: number, y: number, z: number, m: PBRMaterial) => {
       const b = MeshBuilder.CreateBox("extra", { width: w, height: h, depth: d }, scene);
       b.position.set(x, y, z);
       b.material = m;
@@ -227,9 +278,19 @@ export class CarView {
     const ghost = (flags & (CAR_FLAG.FINISHED | CAR_FLAG.DISCONNECTED)) !== 0;
     const emp = (flags & CAR_FLAG.EMP) !== 0;
     const flash = now < this.flashUntil;
-    this.paint.emissiveColor = flash ? new Color3(1, 1, 1) : emp ? new Color3(0.1, 0.6, 0.8) : wrecked ? Color3.Black() : new Color3(0.05, 0.05, 0.05);
-    this.paint.alpha = ghost ? 0.45 : 1;
-    this.paint.diffuseColor = wrecked ? new Color3(0.3, 0.3, 0.3) : Color3.White();
+    const state = flash ? 3 : emp ? 2 : wrecked ? 1 : 0;
+    if (state !== this.paintState) {
+      this.paintState = state;
+      this.paint.emissiveColor = state === 3 ? new Color3(1, 1, 1) : state === 2 ? new Color3(0.05, 0.4, 0.6) : Color3.Black();
+      // Wrecked: scorched, dull paint.
+      this.paint.albedoColor = state === 1 ? new Color3(0.08, 0.08, 0.08) : Color3.White();
+      this.paint.roughness = state === 1 ? 0.8 : this.paintRough;
+    }
+    const alpha = ghost ? 0.45 : 1;
+    if (this.paint.alpha !== alpha) {
+      this.paint.alpha = alpha;
+      this.paint.transparencyMode = ghost ? 2 : null;
+    }
   }
 
   /** Garage turntable: spin the car in place, wheels idle. */

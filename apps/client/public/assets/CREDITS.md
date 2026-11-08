@@ -1,0 +1,111 @@
+# Third-party assets
+
+All files under `pbr/`, `env/` and `models/` come from [Poly Haven](https://polyhaven.com) and are **CC0** (public domain). Thank you to the Poly Haven artists and photographers.
+
+- `pbr/laminate/` — Laminate Floor 02 (`laminate_floor_02`), https://polyhaven.com/a/laminate_floor_02
+- `pbr/carpet/` — Poly Wool Herringbone (`poly_wool_herringbone`), https://polyhaven.com/a/poly_wool_herringbone
+- `pbr/floor-tiles/` — Interior Tiles (`interior_tiles`), https://polyhaven.com/a/interior_tiles
+- `pbr/mosaic/` — Marble Tiles (`marble_tiles`), https://polyhaven.com/a/marble_tiles
+- `pbr/lawn/` — Leafy Grass (`leafy_grass`), https://polyhaven.com/a/leafy_grass
+- `pbr/garage-concrete/` — Garage Floor (`garage_floor`), https://polyhaven.com/a/garage_floor
+- `pbr/parquet/` — Herringbone Parquet (`herringbone_parquet`), https://polyhaven.com/a/herringbone_parquet
+- `pbr/sand/` — Sand 01 (`sand_01`), https://polyhaven.com/a/sand_01
+- `pbr/dirt/` — Park Dirt (`park_dirt`), https://polyhaven.com/a/park_dirt
+- `pbr/plaster/` — Painted Plaster Wall (`painted_plaster_wall`), https://polyhaven.com/a/painted_plaster_wall
+- `pbr/wall-tiles/` — Long White Tiles (`long_white_tiles`), https://polyhaven.com/a/long_white_tiles
+- `pbr/block-wall/` — Concrete Block Wall (`concrete_block_wall`), https://polyhaven.com/a/concrete_block_wall
+- `pbr/panelling/` — Dark Paneled Wood (`dark_paneled_wood`), https://polyhaven.com/a/dark_paneled_wood
+- `pbr/wood/` — Kitchen Wood (`kitchen_wood`), https://polyhaven.com/a/kitchen_wood
+- `pbr/wood-fine/` — Fine Grained Wood (`fine_grained_wood`), https://polyhaven.com/a/fine_grained_wood
+- `pbr/oak/` — Grey Oak Veneer 01 (`grey_oak_veneer_01`), https://polyhaven.com/a/grey_oak_veneer_01
+- `pbr/linen/` — Rough Linen (`rough_linen`), https://polyhaven.com/a/rough_linen
+- `pbr/velvet/` — Velour Velvet (`velour_velvet`), https://polyhaven.com/a/velour_velvet
+- `pbr/fleece/` — Knitted Fleece (`knitted_fleece`), https://polyhaven.com/a/knitted_fleece
+- `pbr/leather/` — Brown Leather (`brown_leather`), https://polyhaven.com/a/brown_leather
+- `pbr/bark/` — Bark Brown 02 (`bark_brown_02`), https://polyhaven.com/a/bark_brown_02
+- `pbr/rock/` — Dry Riverbed Rock (`dry_riverbed_rock`), https://polyhaven.com/a/dry_riverbed_rock
+- `pbr/granite/` — Granite Tile (`granite_tile`), https://polyhaven.com/a/granite_tile
+- `models/Sofa_01.glb` — Sofa 01, https://polyhaven.com/a/Sofa_01
+- `models/ArmChair_01.glb` — Arm Chair 01, https://polyhaven.com/a/ArmChair_01
+- `models/CoffeeTable_01.glb` — Coffee Table 01, https://polyhaven.com/a/CoffeeTable_01
+- `models/Ottoman_01.glb` — Ottoman 01, https://polyhaven.com/a/Ottoman_01
+- `models/Television_01.glb` — Television 01, https://polyhaven.com/a/Television_01
+- `models/side_table_01.glb` — Side Table 01, https://polyhaven.com/a/side_table_01
+- `models/potted_plant_02.glb` — Potted Plant 02, https://polyhaven.com/a/potted_plant_02
+- `models/potted_plant_04.glb` — Potted Plant 04, https://polyhaven.com/a/potted_plant_04
+- `models/hanging_picture_frame_01.glb` — Hanging Picture Frame 01, https://polyhaven.com/a/hanging_picture_frame_01
+- `models/throw_pillows_01.glb` — Throw Pillows 01, https://polyhaven.com/a/throw_pillows_01
+- `models/round_wooden_table_01.glb` — Round Wooden Table 01, https://polyhaven.com/a/round_wooden_table_01
+- `models/dining_chair_02.glb` — Dining Chair 02, https://polyhaven.com/a/dining_chair_02
+- `models/electric_stove.glb` — Electric Stove, https://polyhaven.com/a/electric_stove
+- `models/vintage_microwave.glb` — Vintage Microwave, https://polyhaven.com/a/vintage_microwave
+- `models/vintage_electric_kettle.glb` — Vintage Electric Kettle, https://polyhaven.com/a/vintage_electric_kettle
+- `models/food_apple_01.glb` — Food Apple 01, https://polyhaven.com/a/food_apple_01
+- `models/bananas.glb` — Bananas, https://polyhaven.com/a/bananas
+- `models/lemon.glb` — Lemon, https://polyhaven.com/a/lemon
+- `models/tea_set_01.glb` — Tea Set 01, https://polyhaven.com/a/tea_set_01
+- `models/wooden_cutting_board.glb` — Wooden Cutting Board, https://polyhaven.com/a/wooden_cutting_board
+- `models/rubber_duck_toy.glb` — Rubber Duck Toy, https://polyhaven.com/a/rubber_duck_toy
+- `models/football.glb` — Football, https://polyhaven.com/a/football
+- `models/american_football.glb` — American Football, https://polyhaven.com/a/american_football
+- `models/baseball_01.glb` — Baseball 01, https://polyhaven.com/a/baseball_01
+- `models/gamepad.glb` — Gamepad, https://polyhaven.com/a/gamepad
+- `models/Ukulele_01.glb` — Ukulele 01, https://polyhaven.com/a/Ukulele_01
+- `models/alarm_clock_01.glb` — Alarm Clock 01, https://polyhaven.com/a/alarm_clock_01
+- `models/painted_wooden_cabinet.glb` — Painted Wooden Cabinet, https://polyhaven.com/a/painted_wooden_cabinet
+- `models/painted_wooden_nightstand.glb` — Painted Wooden Nightstand, https://polyhaven.com/a/painted_wooden_nightstand
+- `models/painted_wooden_chair_01.glb` — Painted Wooden Chair 01, https://polyhaven.com/a/painted_wooden_chair_01
+- `models/SchoolDesk_01.glb` — School Desk 01, https://polyhaven.com/a/SchoolDesk_01
+- `models/SchoolChair_01.glb` — School Chair 01, https://polyhaven.com/a/SchoolChair_01
+- `models/wooden_stool_01.glb` — Wooden Stool 01, https://polyhaven.com/a/wooden_stool_01
+- `models/GreenChair_01.glb` — Green Chair 01, https://polyhaven.com/a/GreenChair_01
+- `models/vintage_cabinet_01.glb` — Vintage Cabinet 01, https://polyhaven.com/a/vintage_cabinet_01
+- `models/desk_lamp_arm_01.glb` — Desk Lamp Arm 01, https://polyhaven.com/a/desk_lamp_arm_01
+- `models/ornate_mirror_01.glb` — Ornate Mirror 01, https://polyhaven.com/a/ornate_mirror_01
+- `models/WetFloorSign_01.glb` — Wet Floor Sign 01, https://polyhaven.com/a/WetFloorSign_01
+- `models/bleach_bottle.glb` — Bleach Bottle, https://polyhaven.com/a/bleach_bottle
+- `models/all_purpose_cleaner.glb` — All Purpose Cleaner, https://polyhaven.com/a/all_purpose_cleaner
+- `models/plunger.glb` — Plunger, https://polyhaven.com/a/plunger
+- `models/wicker_basket_01.glb` — Wicker Basket 01, https://polyhaven.com/a/wicker_basket_01
+- `models/metal_tool_chest.glb` — Metal Tool Chest, https://polyhaven.com/a/metal_tool_chest
+- `models/steel_frame_shelves_01.glb` — Steel Frame Shelves 01, https://polyhaven.com/a/steel_frame_shelves_01
+- `models/wooden_ladder.glb` — Wooden Ladder, https://polyhaven.com/a/wooden_ladder
+- `models/Barrel_01.glb` — Barrel_01, https://polyhaven.com/a/Barrel_01
+- `models/Barrel_02.glb` — Barrel 02, https://polyhaven.com/a/Barrel_02
+- `models/old_tyre.glb` — Old Tyre, https://polyhaven.com/a/old_tyre
+- `models/cardboard_box_01.glb` — Cardboard Box 01, https://polyhaven.com/a/cardboard_box_01
+- `models/Drill_01.glb` — Drill 01, https://polyhaven.com/a/Drill_01
+- `models/bench_vice_01.glb` — Bench Vice 01, https://polyhaven.com/a/bench_vice_01
+- `models/spray_paint_bottles.glb` — Spray Paint Bottles, https://polyhaven.com/a/spray_paint_bottles
+- `models/metal_jerrycan.glb` — Metal Jerrycan, https://polyhaven.com/a/metal_jerrycan
+- `models/portable_generator.glb` — Portable Generator, https://polyhaven.com/a/portable_generator
+- `models/tire_pump.glb` — Tire Pump, https://polyhaven.com/a/tire_pump
+- `models/wooden_crate_01.glb` — Wooden Crate 01, https://polyhaven.com/a/wooden_crate_01
+- `models/book_encyclopedia_set_01.glb` — Book Encyclopedia Set 01, https://polyhaven.com/a/book_encyclopedia_set_01
+- `models/Rockingchair_01.glb` — Rockingchair 01, https://polyhaven.com/a/Rockingchair_01
+- `models/vintage_grandfather_clock_01.glb` — Vintage Grandfather Clock 01, https://polyhaven.com/a/vintage_grandfather_clock_01
+- `models/marble_bust_01.glb` — Marble Bust 01, https://polyhaven.com/a/marble_bust_01
+- `models/vintage_oil_lamp.glb` — Vintage Oil Lamp, https://polyhaven.com/a/vintage_oil_lamp
+- `models/mid_century_lounge_chair.glb` — Mid Century Lounge Chair, https://polyhaven.com/a/mid_century_lounge_chair
+- `models/garden_gnome.glb` — Garden Gnome, https://polyhaven.com/a/garden_gnome
+- `models/planter_box_01.glb` — Planter Box 01, https://polyhaven.com/a/planter_box_01
+- `models/planter_pot_clay.glb` — Planter Pot Clay, https://polyhaven.com/a/planter_pot_clay
+- `models/watering_can_metal_01.glb` — Watering Can Metal 01, https://polyhaven.com/a/watering_can_metal_01
+- `models/wooden_picnic_table.glb` — Wooden Picnic Table, https://polyhaven.com/a/wooden_picnic_table
+- `models/painted_wooden_bench.glb` — Painted Wooden Bench, https://polyhaven.com/a/painted_wooden_bench
+- `models/tree_stump_01.glb` — Tree Stump 01, https://polyhaven.com/a/tree_stump_01
+- `models/fern_02.glb` — Fern 02, https://polyhaven.com/a/fern_02
+- `models/shrub_02.glb` — Shrub 02, https://polyhaven.com/a/shrub_02
+- `models/stone_01.glb` — Stone 01, https://polyhaven.com/a/stone_01
+- `models/lambis_shell.glb` — Lambis Shell, https://polyhaven.com/a/lambis_shell
+- `models/wooden_bucket_01.glb` — Wooden Bucket 01, https://polyhaven.com/a/wooden_bucket_01
+- `env/toy-track.hdr` — Empty Play Room (`empty_play_room`), https://polyhaven.com/a/empty_play_room
+- `env/rug.hdr` — Lythwood Lounge (`lythwood_lounge`), https://polyhaven.com/a/lythwood_lounge
+- `env/kitchen.hdr` — Kiara Interior (`kiara_interior`), https://polyhaven.com/a/kiara_interior
+- `env/toy-canyon.hdr` — Small Empty Room 3 (`small_empty_room_3`), https://polyhaven.com/a/small_empty_room_3
+- `env/bathroom.hdr` — Modern Bathroom (`modern_bathroom`), https://polyhaven.com/a/modern_bathroom
+- `env/garden.hdr` — Residential Garden (`residential_garden`), https://polyhaven.com/a/residential_garden
+- `env/bedroom.hdr` — Hotel Room (`hotel_room`), https://polyhaven.com/a/hotel_room
+- `env/workshop.hdr` — Garage (`garage`), https://polyhaven.com/a/garage
+- `env/library.hdr` — Reading Room (`reading_room`), https://polyhaven.com/a/reading_room
+- `env/sandbox.hdr` — Air Museum Playground (`air_museum_playground`), https://polyhaven.com/a/air_museum_playground

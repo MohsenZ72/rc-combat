@@ -18,9 +18,11 @@
     "db:up": "bash scripts/db-up.sh",
     "db:migrate": "npm run migrate -w @rc/api",
     "dev": "npm run build:packages && concurrently -k -n api,game,client -c blue,magenta,green \"npm run dev -w @rc/api\" \"npm run dev -w @rc/game-server\" \"npm run dev -w @rc/client\"",
-    "loadtest": "npm run loadtest -w @rc/game-server --"
+    "loadtest": "npm run loadtest -w @rc/game-server --",
+    "assets": "python3 scripts/fetch-assets.py"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "^4.5.1",
     "concurrently": "^10.0.7",
     "tsx": "^4.23.15",
     "typescript": "5.9.3"

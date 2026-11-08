@@ -59,3 +59,7 @@ Start at [docs/README.md](docs/README.md). Persian overview: [README.fa.md](READ
 ## Status
 
 MVP (phase 1) is done: playable multiplayer loop, four house-themed maps with elevation, water and ramps, diecast cars, handbrake drift, jump, six items plus a zapper, anti-cheat, results, replays, load-tested. Web3 prize tournaments are designed but **not** implemented, and real-money play needs legal review first; see [docs/system-design/06-web3.md](docs/system-design/06-web3.md).
+
+## Credits
+
+Photo-scanned materials, HDRIs and 3D props are CC0 from [Poly Haven](https://polyhaven.com); see [apps/client/public/assets/CREDITS.md](apps/client/public/assets/CREDITS.md).
