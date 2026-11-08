@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { jwtVerify, SignJWT } from "jose";
+import { randomCosmetics, sanitizeCosmetics, type Cosmetics } from "@rc/shared";
 import { ENV, type Env } from "../config/env.js";
 import { PlayersRepository } from "../players/players.repository.js";
 import { SessionsRepository } from "./sessions.repository.js";
@@ -14,6 +15,15 @@ export interface SessionInfo {
   playerId: string;
   nickname: string;
   status: "active" | "suspended";
+  /** Visual loadout, re-validated so stored garbage can never reach a match. */
+  cosmetics: Cosmetics;
+}
+
+/** Stable seed from a uuid so first-time players get a consistent random car. */
+function hashId(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return h >>> 0;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -74,7 +84,12 @@ export class AuthService {
     if (!session) return null;
     const player = await this.players.refreshStatus(playerId);
     if (!player) return null;
-    return { playerId: player.id, nickname: player.nickname, status: player.status === "active" ? "active" : "suspended" };
+    return {
+      playerId: player.id,
+      nickname: player.nickname,
+      status: player.status === "active" ? "active" : "suspended",
+      cosmetics: player.cosmetics ? sanitizeCosmetics(player.cosmetics) : randomCosmetics(hashId(player.id)),
+    };
   }
 
   logout(sessionId: string): Promise<void> {

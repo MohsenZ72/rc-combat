@@ -1,10 +1,12 @@
 import { jwtVerify } from "jose";
+import { sanitizeCosmetics, type Cosmetics } from "@rc/shared";
 import type { BackendPort, SessionInfo } from "./api-client.js";
 
 export interface AuthenticatedPlayer {
   playerId: string;
   sessionId: string;
   nickname: string;
+  cosmetics: Cosmetics;
 }
 
 export class AuthError extends Error {}
@@ -57,6 +59,7 @@ export class TokenVerifier {
     }
     if (!info) throw new AuthError("session expired");
     if (info.status !== "active") throw new AuthError("account suspended");
-    return { playerId, sessionId, nickname: info.nickname };
+    // Re-validated here too: the room broadcasts it to every player.
+    return { playerId, sessionId, nickname: info.nickname, cosmetics: sanitizeCosmetics(info.cosmetics) };
   }
 }

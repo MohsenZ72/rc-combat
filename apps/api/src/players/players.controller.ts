@@ -1,4 +1,7 @@
-import { Controller, Get, Inject, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Put, Query, UseGuards } from "@nestjs/common";
+import { cosmeticsSchema, type Cosmetics } from "@rc/shared";
+import { AuthService } from "../auth/auth.service.js";
+import { ZodPipe } from "../common/zod.pipe.js";
 import type { AuthedPlayer } from "../auth/auth.service.js";
 import { CurrentPlayer, PlayerAuthGuard } from "../common/player-auth.guard.js";
 import { MatchesRepository } from "../matches/matches.repository.js";
@@ -10,7 +13,22 @@ export class PlayersController {
   constructor(
     @Inject(PlayersRepository) private readonly players: PlayersRepository,
     @Inject(MatchesRepository) private readonly matches: MatchesRepository,
+    @Inject(AuthService) private readonly auth: AuthService,
   ) {}
+
+  /** Current car loadout (a stable random one until the player saves their own). */
+  @Get("me/cosmetics")
+  async cosmetics(@CurrentPlayer() player: AuthedPlayer) {
+    const info = await this.auth.validateSession(player.sessionId, player.playerId);
+    return info?.cosmetics;
+  }
+
+  /** Saves a loadout. Only ids from the shared whitelist pass; cosmetics never touch gameplay. */
+  @Put("me/cosmetics")
+  async saveCosmetics(@CurrentPlayer() player: AuthedPlayer, @Body(new ZodPipe(cosmeticsSchema)) body: Cosmetics) {
+    await this.players.setCosmetics(player.playerId, body);
+    return body;
+  }
 
   @Get("me")
   async me(@CurrentPlayer() player: AuthedPlayer) {

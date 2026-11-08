@@ -10,6 +10,7 @@ export interface SessionInfo {
   playerId: string;
   nickname: string;
   status: "active" | "suspended";
+  cosmetics?: unknown;
 }
 
 /** Port the game server uses to talk to the persistent backend. */

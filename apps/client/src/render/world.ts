@@ -107,6 +107,12 @@ export class World {
     this.camera.setTarget(this.camTarget);
   }
 
+  /** Fixed product-shot camera: `dist` away at `height`, offset sideways so a side panel doesn't cover the subject. */
+  lookAt(x: number, y: number, z: number, dist: number, height: number, side: number): void {
+    this.camera.position.copyFrom(toWorld(x + dist * 0.75, y + dist * 0.65 + side, z + height));
+    this.camera.setTarget(toWorld(x, y + side * 0.6, z));
+  }
+
   /** Overview camera for lobby/results. */
   orbit(t: number): void {
     const track = this.track;

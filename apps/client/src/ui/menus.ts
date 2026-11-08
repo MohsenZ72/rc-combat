@@ -41,7 +41,12 @@ export class TitleScreen implements Screen {
 
   private track: string;
 
-  constructor(nickname: string | null, private readonly onPlay: (nickname: string, track: string) => Promise<void>, track = "any") {
+  constructor(
+    nickname: string | null,
+    private readonly onPlay: (nickname: string, track: string) => Promise<void>,
+    track = "any",
+    private readonly onGarage?: (nickname: string) => Promise<void>,
+  ) {
     this.track = track;
     this.input = h("input", {
       class: "input",
@@ -62,6 +67,7 @@ export class TitleScreen implements Screen {
       h("div", { class: "field" }, h("label", { for: "nick" }, "Racer name"), this.input),
       this.mapPicker(),
       this.button,
+      h("button", { class: "btn btn--ghost btn--block", type: "button", onclick: () => void this.openGarage() }, "Garage — customise your car"),
       this.error,
     );
     this.el = h(
@@ -107,6 +113,20 @@ export class TitleScreen implements Screen {
         ),
       ),
     );
+  }
+
+  private async openGarage(): Promise<void> {
+    const parsed = nicknameSchema.safeParse(this.input.value);
+    if (!parsed.success) {
+      this.error.textContent = "Pick a racer name first — your car is saved to it.";
+      this.input.focus();
+      return;
+    }
+    try {
+      await this.onGarage?.(parsed.data);
+    } catch (err) {
+      this.error.textContent = (err as Error).message || "Could not open the garage.";
+    }
   }
 
   private async submit(e: Event): Promise<void> {

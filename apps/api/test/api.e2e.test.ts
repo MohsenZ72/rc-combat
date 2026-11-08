@@ -119,6 +119,27 @@ describe("auth", () => {
   });
 });
 
+describe("car cosmetics", () => {
+  it("saves a whitelisted loadout and rejects anything that could touch gameplay", async () => {
+    const g = await guest("cosm");
+    const auth = { authorization: `Bearer ${g.token}` };
+    const first = await http.get("/players/me/cosmetics").set(auth);
+    expect(first.status).toBe(200);
+    expect(typeof first.body.body).toBe("string");
+    const loadout = { body: "suv", paint: "#2f7de1", accent: "#ffc933", finish: "metallic", rims: "beadlock", rimColor: "gold", tyres: "offroad", number: 42, stickers: [{ id: "flames", slot: "hood" }] };
+    expect((await http.put("/players/me/cosmetics").set(auth).send(loadout)).status).toBe(200);
+    expect((await http.get("/players/me/cosmetics").set(auth)).body).toEqual(loadout);
+    // Unknown ids, extra fields and duplicate sticker slots are refused.
+    expect((await http.put("/players/me/cosmetics").set(auth).send({ ...loadout, body: "tank" })).status).toBe(400);
+    expect((await http.put("/players/me/cosmetics").set(auth).send({ ...loadout, speed: 99 })).status).toBe(400);
+    const dup = { ...loadout, stickers: [{ id: "flames", slot: "hood" }, { id: "star", slot: "hood" }] };
+    expect((await http.put("/players/me/cosmetics").set(auth).send(dup)).status).toBe(400);
+    // Game servers receive the loadout with the session check.
+    const info = await http.post("/internal/sessions/validate").set(KEY).send({ sessionId: decodeSid(g.token), playerId: g.player.id });
+    expect(info.body.cosmetics).toEqual(loadout);
+  });
+});
+
 describe("internal routes", () => {
   it("require the internal key", async () => {
     expect((await http.post("/internal/matches").send({})).status).toBe(401);

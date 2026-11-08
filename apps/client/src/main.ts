@@ -1,6 +1,7 @@
 import "./styles/tokens.css";
 import "./styles/ui.css";
-import { checkSession, guestLogin, loadSession, type Session } from "./net/api.js";
+import { checkSession, fetchCosmetics, guestLogin, loadSession, saveCosmetics, type Session } from "./net/api.js";
+import { GarageScreen } from "./ui/garage.js";
 import { Phase } from "@rc/shared";
 import type { RaceClient } from "./game/race-client.js";
 import { HudScreen } from "./ui/hud.js";
@@ -34,17 +35,42 @@ async function getClient(): Promise<RaceClient> {
 }
 
 function showTitle(): void {
-  screens.reset(new TitleScreen(session?.player.nickname ?? null, play, lastTrack));
+  screens.reset(new TitleScreen(session?.player.nickname ?? null, play, lastTrack, openGarage));
 }
 
 let lastTrack = "any";
 
-async function play(nickname: string, track = lastTrack): Promise<void> {
-  lastTrack = track;
+async function ensureSession(nickname: string): Promise<Session> {
   if (!session || session.player.nickname !== nickname || !(await checkSession(session))) {
     session = await guestLogin(nickname);
   }
+  return session;
+}
+
+async function openGarage(nickname: string): Promise<void> {
+  const s = await ensureSession(nickname);
   const rc = await getClient();
+  const current = await fetchCosmetics(s);
+  screens.reset(
+    new GarageScreen(
+      current,
+      (c) => rc.showGarage(c),
+      async (c) => {
+        await saveCosmetics(s, c);
+      },
+      () => {
+        rc.closeGarage();
+        showTitle();
+      },
+    ),
+  );
+}
+
+async function play(nickname: string, track = lastTrack): Promise<void> {
+  lastTrack = track;
+  const s = await ensureSession(nickname);
+  const rc = await getClient();
+  rc.closeGarage();
   rc.clear();
   const lobby = new LobbyScreen(() => void rc.leave().then(showTitle));
   rc.on("lobby", (l) => {
@@ -77,9 +103,9 @@ async function play(nickname: string, track = lastTrack): Promise<void> {
   });
   screens.reset(lobby);
   try {
-    await rc.join(session.token, track);
+    await rc.join(s.token, track);
   } catch (err) {
-    screens.reset(new TitleScreen(nickname, play, track));
+    screens.reset(new TitleScreen(nickname, play, track, openGarage));
     throw err;
   }
 }

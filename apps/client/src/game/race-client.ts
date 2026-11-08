@@ -1,7 +1,7 @@
 import { CarPredictor, lerpAngle, loadRapier, Track, TRACKS, WORKSHOP_CIRCUIT } from "@rc/game-core";
-import { CAR_FLAG, DEFAULT_CONFIG, ITEM_NAMES, mergeConfig, Phase, type CarSnapshot, type GameConfig, type GameEvent, type Snapshot } from "@rc/shared";
+import { CAR_FLAG, DEFAULT_CONFIG, ITEM_NAMES, mergeConfig, Phase, type CarSnapshot, type Cosmetics, type GameConfig, type GameEvent, type Snapshot } from "@rc/shared";
 import { Connection, type LobbyState, type ResultsMessage, type SeatInfo, type Welcome } from "../net/connection.js";
-import { CarViews } from "../render/cars.js";
+import { CarView, CarViews } from "../render/cars.js";
 import { Effects } from "../render/effects.js";
 import { toWorld, World } from "../render/world.js";
 import type { HudScreen } from "../ui/hud.js";
@@ -127,6 +127,20 @@ export class RaceClient extends Emitter<ClientEvents> {
     this.resetMatch();
   }
 
+  private garageCar: CarView | null = null;
+  private garageAngle = 0;
+
+  /** Shows a turntable preview of a loadout (garage screen). Rebuilds when called again. */
+  showGarage(cosmetics: Cosmetics): void {
+    this.garageCar?.dispose();
+    this.garageCar = new CarView(this.world, `garage-${Date.now()}`, cosmetics);
+  }
+
+  closeGarage(): void {
+    this.garageCar?.dispose();
+    this.garageCar = null;
+  }
+
   /** Debug snapshot of client-side state (used by the dev console handle). */
   debug() {
     return {
@@ -174,7 +188,7 @@ export class RaceClient extends Emitter<ClientEvents> {
     this.interp = new SnapshotInterpolator(this.config.net.tickRate, this.config.net.interpolationDelayMs);
     this.predictor?.dispose();
     this.predictor = new CarPredictor(this.rapier, this.track, this.config, w.slot);
-    for (const s of w.seats) this.cars.ensure(s.slot, s.color);
+    for (const s of w.seats) this.cars.ensure(s.slot, s.cosmetics);
     this.cars.retain(new Set(w.seats.map((s) => s.slot)));
     this.emit("welcome", w);
   }
@@ -351,7 +365,7 @@ export class RaceClient extends Emitter<ClientEvents> {
     const mapDots: { x: number; y: number; color: string; me: boolean }[] = [];
     for (const c of remote) {
       visible.add(c.slot);
-      const view = this.cars.ensure(c.slot, this.seats.get(c.slot)?.color ?? "#cccccc");
+      const view = this.cars.ensure(c.slot);
       let x = c.x;
       let y = c.y;
       let z = c.z;
@@ -388,7 +402,14 @@ export class RaceClient extends Emitter<ClientEvents> {
       this.placeTag(c.slot, x, y);
     }
     if (remote.length > 0) this.cars.retain(visible);
-    if (!this.cameraSnapped) this.world.orbit(now / 1000);
+    if (this.garageCar) {
+      // Turntable in front of the start line, camera close and low like a product shot.
+      this.garageAngle += dt * 0.5;
+      const pose = this.track.poseAt(20);
+      const h = this.track.heightAt(20);
+      this.garageCar.showcase(pose.x, pose.y, h, this.garageAngle);
+      this.world.lookAt(pose.x, pose.y, h + 0.6, 6.6, 2.3, -0.9);
+    } else if (!this.cameraSnapped) this.world.orbit(now / 1000);
     this.fx.sync(this.interp.projectiles(), now);
     this.fx.update(dt);
     if (this.hud && now - this.lastMapDraw > 100) {

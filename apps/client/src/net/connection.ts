@@ -1,5 +1,5 @@
 import { Client, type Room } from "@colyseus/sdk";
-import { decodeSnapshot, encodeInput, MSG, type GameEvent, type Phase, type Snapshot } from "@rc/shared";
+import { decodeSnapshot, encodeInput, MSG, type Cosmetics, type GameEvent, type Phase, type Snapshot } from "@rc/shared";
 import { Emitter } from "../game/emitter.js";
 
 const GAME_SERVER_URL = import.meta.env.VITE_GAME_SERVER_URL ?? "ws://localhost:2567";
@@ -9,6 +9,7 @@ export interface SeatInfo {
   nickname: string;
   isBot: boolean;
   color: string;
+  cosmetics?: Cosmetics;
 }
 
 export interface Welcome {

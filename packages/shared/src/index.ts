@@ -16,3 +16,4 @@ export const SLOT_COLORS = [
   "#ff9f1c",
   "#8a8dff",
 ] as const;
+export * from "./cosmetics.js";

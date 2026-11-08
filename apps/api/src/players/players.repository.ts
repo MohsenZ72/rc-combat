@@ -1,4 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
+import type { Cosmetics } from "@rc/shared";
 import { Database, type Queryable } from "../database/database.js";
 
 export interface PlayerRow {
@@ -7,6 +8,7 @@ export interface PlayerRow {
   status: "active" | "suspended" | "banned";
   suspended_until: Date | null;
   created_at: Date;
+  cosmetics: unknown;
 }
 
 export interface PlayerStats {
@@ -22,14 +24,14 @@ export class PlayersRepository {
 
   async create(nickname: string): Promise<PlayerRow> {
     const { rows } = await this.db.query<PlayerRow>(
-      "INSERT INTO players (nickname) VALUES ($1) RETURNING id, nickname, status, suspended_until, created_at",
+      "INSERT INTO players (nickname) VALUES ($1) RETURNING id, nickname, status, suspended_until, created_at, cosmetics",
       [nickname],
     );
     return rows[0]!;
   }
 
   async findById(id: string): Promise<PlayerRow | null> {
-    const { rows } = await this.db.query<PlayerRow>("SELECT id, nickname, status, suspended_until, created_at FROM players WHERE id = $1", [id]);
+    const { rows } = await this.db.query<PlayerRow>("SELECT id, nickname, status, suspended_until, created_at, cosmetics FROM players WHERE id = $1", [id]);
     return rows[0] ?? null;
   }
 
@@ -38,7 +40,7 @@ export class PlayersRepository {
     const { rows } = await this.db.query<PlayerRow>(
       `UPDATE players SET status = 'active', suspended_until = NULL
          WHERE id = $1 AND status = 'suspended' AND suspended_until IS NOT NULL AND suspended_until <= now()
-       RETURNING id, nickname, status, suspended_until, created_at`,
+       RETURNING id, nickname, status, suspended_until, created_at, cosmetics`,
       [id],
     );
     return rows[0] ?? this.findById(id);
@@ -58,6 +60,11 @@ export class PlayersRepository {
     ]);
     // A suspended player loses every live session immediately.
     await tx.query("UPDATE sessions SET revoked_at = now() WHERE player_id = $1 AND revoked_at IS NULL", [playerId]);
+  }
+
+  /** Stores an already-validated cosmetics loadout. */
+  async setCosmetics(id: string, cosmetics: Cosmetics): Promise<void> {
+    await this.db.query("UPDATE players SET cosmetics = $2 WHERE id = $1", [id, JSON.stringify(cosmetics)]);
   }
 
   async stats(id: string): Promise<PlayerStats> {

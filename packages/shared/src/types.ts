@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { AnomalyKind, SuspicionLevel } from "./config.js";
 
+import type { Cosmetics } from "./cosmetics.js";
+
 /** Lobby-level description of a seat in the match. */
 export interface PlayerSeat {
   slot: number;
@@ -8,6 +10,8 @@ export interface PlayerSeat {
   nickname: string;
   isBot: boolean;
   color: string;
+  /** Visual-only loadout, validated server-side. */
+  cosmetics?: Cosmetics;
 }
 
 export type PlayerFinishStatus = "finished" | "dnf" | "forfeit";

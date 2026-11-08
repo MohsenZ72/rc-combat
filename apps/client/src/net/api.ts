@@ -1,3 +1,5 @@
+import type { Cosmetics } from "@rc/shared";
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 const TOKEN_KEY = "rc.session";
 
@@ -66,4 +68,13 @@ export async function checkSession(s: Session): Promise<boolean> {
 export async function logout(s: Session): Promise<void> {
   saveSession(null);
   await request("/auth/logout", { method: "POST" }, s.token).catch(() => undefined);
+}
+
+export async function fetchCosmetics(s: Session): Promise<Cosmetics> {
+  return request<Cosmetics>("/players/me/cosmetics", {}, s.token);
+}
+
+/** Saves a loadout; the API re-validates it against the shared whitelist. */
+export async function saveCosmetics(s: Session, c: Cosmetics): Promise<Cosmetics> {
+  return request<Cosmetics>("/players/me/cosmetics", { method: "PUT", body: JSON.stringify(c) }, s.token);
 }

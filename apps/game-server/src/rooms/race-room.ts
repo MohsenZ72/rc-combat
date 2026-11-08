@@ -108,7 +108,7 @@ export class RaceRoom extends Room<{ state: RaceStateT; client: RaceClient }> {
     if (this.session.findByPlayer(auth.playerId)) {
       throw new ServerError(CLOSE.DUPLICATE, "already in this match");
     }
-    const seat = this.session.addHuman(auth.playerId, auth.nickname, Date.now());
+    const seat = this.session.addHuman(auth.playerId, auth.nickname, Date.now(), auth.cosmetics);
     client.userData = { playerId: auth.playerId };
     this.state.players.set(auth.playerId, new PlayerInfo({ slot: seat.slot, nickname: seat.nickname, color: seat.color, isBot: false, connected: true }));
     client.send(MSG.WELCOME, this.session.welcome(seat.slot));

@@ -228,6 +228,98 @@ body {
   margin: 0;
 }
 
+/* ---------- garage */
+.screen--garage {
+  place-items: stretch start;
+  background: linear-gradient(90deg, rgb(13 15 19 / 92%) 0, rgb(13 15 19 / 70%) 420px, transparent 640px);
+}
+.garage {
+  width: min(460px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rc-space-3);
+}
+.garage__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rc-space-2);
+}
+.garage__group h3 {
+  margin: 0 0 var(--rc-space-2);
+  font-size: var(--rc-fs-sm);
+  color: var(--rc-ink-200);
+}
+.chip,
+.option {
+  font: inherit;
+  font-weight: 600;
+  color: var(--rc-text);
+  background: var(--rc-ink-950);
+  border: var(--rc-border-w) solid var(--rc-border);
+  border-radius: 999px;
+  padding: var(--rc-space-2) var(--rc-space-4);
+  min-height: 44px;
+  cursor: pointer;
+}
+.option {
+  border-radius: var(--rc-radius-md);
+}
+.chip[aria-selected="true"],
+.option[aria-pressed="true"] {
+  border-color: var(--rc-tape);
+  background: rgb(255 201 51 / 12%);
+}
+.chip:focus-visible,
+.option:focus-visible,
+.swatch-btn:focus-visible,
+.sticker-btn:focus-visible {
+  outline: 3px solid var(--rc-tape);
+  outline-offset: 2px;
+}
+.options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--rc-space-2);
+}
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: var(--rc-space-2);
+}
+.swatch-btn {
+  aspect-ratio: 1;
+  border-radius: var(--rc-radius-sm);
+  border: var(--rc-border-w) solid rgb(0 0 0 / 40%);
+  cursor: pointer;
+}
+.swatch-btn[aria-pressed="true"] {
+  outline: 3px solid var(--rc-tape);
+  outline-offset: 2px;
+}
+.stickers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: var(--rc-space-1);
+}
+.sticker-btn {
+  display: grid;
+  place-items: center;
+  min-height: 56px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--rc-text-muted);
+  /* Mid-grey tile so both dark and light sticker art stays visible. */
+  background: #5a6475;
+  border: var(--rc-border-w) solid var(--rc-border);
+  border-radius: var(--rc-radius-sm);
+  cursor: pointer;
+}
+.sticker-btn[aria-pressed="true"] {
+  border-color: var(--rc-tape);
+}
+
 /* ---------- map picker */
 .maps {
   border: 0;

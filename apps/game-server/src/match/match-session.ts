@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
+  DEFAULT_COSMETICS,
+  randomCosmetics,
+  type Cosmetics,
   configHash,
   encodeSnapshot,
   MSG,
@@ -94,11 +97,12 @@ export class MatchSession {
   }
 
   /** Adds a human to the lobby. Throws if the match already started or is full. */
-  addHuman(playerId: string, nickname: string, nowMs: number): Seat {
+  addHuman(playerId: string, nickname: string, nowMs: number, cosmetics?: Cosmetics): Seat {
     if (this.phase !== "lobby") throw new Error("match already started");
     if (this.seats.length >= this.config.maxPlayers) throw new Error("match full");
     if (this.findByPlayer(playerId)) throw new Error("player already in match");
     const seat = this.makeSeat(this.freeSlot(), playerId, nickname, false, nowMs);
+    seat.cosmetics = cosmetics ?? DEFAULT_COSMETICS;
     this.seats.push(seat);
     this.seats.sort((a, b) => a.slot - b.slot);
     return seat;
@@ -119,6 +123,7 @@ export class MatchSession {
       while (this.seats.length < this.config.maxPlayers) {
         const slot = this.freeSlot();
         const seat = this.makeSeat(slot, null, `Bot ${n++}`, true, nowMs);
+        seat.cosmetics = randomCosmetics(this.seed + slot * 7919);
         seat.bot = new BotDriver(slot, this.seed, 0.45 + ((slot * 37) % 50) / 100);
         this.seats.push(seat);
       }
@@ -315,7 +320,7 @@ export class MatchSession {
       tickRate: this.config.net.tickRate,
       snapshotDivisor: this.config.net.snapshotDivisor,
       laps: this.config.race.laps,
-      seats: this.seats.map(({ slot: s, nickname, isBot, color }) => ({ slot: s, nickname, isBot, color })),
+      seats: this.seats.map(({ slot: s, nickname, isBot, color, cosmetics }) => ({ slot: s, nickname, isBot, color, cosmetics })),
       messageTypes: MSG,
     };
   }
