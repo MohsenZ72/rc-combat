@@ -89,7 +89,7 @@ export class BotDriver {
       const d = Math.hypot(dx, dy);
       if (d > 32 || d < 2) continue;
       const off = Math.abs(angleDelta(car.heading, Math.atan2(dy, dx)));
-      if (off < 0.18 && this.rng.next() < 0.5 * this.skill) {
+      if (off < 0.15 && this.rng.next() < 0.12 * this.skill) {
         buttons |= BTN.FIRE;
         break;
       }

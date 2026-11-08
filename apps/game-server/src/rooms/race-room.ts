@@ -1,5 +1,5 @@
 import { Room, ServerError, type AuthContext, type Client } from "colyseus";
-import { CLIENT_MESSAGE_TYPES, MSG, Phase, type GameConfig } from "@rc/shared";
+import { MSG, Phase, type GameConfig } from "@rc/shared";
 import type { Rapier, Track } from "@rc/game-core";
 import type { BackendPort } from "../api-client.js";
 import { AuthError, type AuthenticatedPlayer, type TokenVerifier } from "../auth.js";
@@ -65,18 +65,23 @@ export class RaceRoom extends Room<{ state: RaceStateT; client: RaceClient }> {
     this.setPatchRate(200);
     metrics.rooms++;
 
-    this.onMessage(MSG.INPUT, (client, payload: unknown) => {
+    // Hard transport-level cap; the InputGuard token bucket handles finer-grained flooding.
+    this.maxMessagesPerSecond = config.net.tickRate * 4 + 10;
+    const onInput = (client: RaceClient, payload: unknown) => {
       metrics.recordIn(byteLength(payload));
       const seat = this.seatOf(client);
       if (seat && this.session.onInput(seat.slot, payload, Date.now())) this.kick(client, "protocol violations");
-    });
+    };
+    this.onMessageBytes(MSG.INPUT, onInput);
+    // A JSON-encoded INPUT is malformed by definition; the guard rejects and counts it.
+    this.onMessage(MSG.INPUT, onInput);
     this.onMessage(MSG.PONG, (client, payload: unknown) => {
       const seat = this.seatOf(client);
       if (seat) this.session.onPong(seat.slot, payload, Date.now());
     });
-    // Any other message type is a protocol violation (e.g. "finish", "setScore", "setHealth").
+    // Every other message (e.g. "finish", "setScore", "setHealth", or a known type in the
+    // wrong encoding) is a protocol violation: counted, scored and eventually kicked.
     this.onMessage("*", (client, type) => {
-      if (CLIENT_MESSAGE_TYPES.has(Number(type))) return;
       const seat = this.seatOf(client);
       if (!seat) return;
       this.log.warn({ slot: seat.slot, type: String(type).slice(0, 32) }, "forbidden client message");
@@ -289,7 +294,6 @@ export class RaceRoom extends Room<{ state: RaceStateT; client: RaceClient }> {
 }
 
 function byteLength(payload: unknown): number {
-  if (payload instanceof Uint8Array) return payload.byteLength;
-  if (payload instanceof ArrayBuffer) return payload.byteLength;
+  if (ArrayBuffer.isView(payload) || payload instanceof ArrayBuffer) return payload.byteLength;
   return 0;
 }

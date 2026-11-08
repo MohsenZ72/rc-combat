@@ -1,0 +1,78 @@
+/*
+ * Garage Rumble design tokens — the single source for colour, type, space and
+ * motion. Components in ui.css only reference these variables.
+ * Documented in docs/design-system.md.
+ */
+:root {
+  /* Neutrals: workshop night */
+  --rc-ink-950: #0d0f13;
+  --rc-ink-900: #151920;
+  --rc-ink-800: #1d232d;
+  --rc-ink-700: #2a3240;
+  --rc-ink-500: #4d5869;
+  --rc-ink-400: #8a95a8;
+  --rc-ink-200: #c9d0db;
+  --rc-ink-100: #eef1f6;
+
+  /* Brand + semantic */
+  --rc-tape: #ffc933;          /* hazard tape: primary accent, focus, CTAs */
+  --rc-tape-ink: #1b1500;      /* text on tape */
+  --rc-signal: #ff5a36;        /* damage, danger, rockets */
+  --rc-volt: #2fd3ff;          /* electric: bolts, EMP, shield */
+  --rc-go: #3ddc84;            /* success, verified, repair */
+  --rc-warn: #ff9f1c;          /* warnings, wrong way */
+
+  /* Surfaces */
+  --rc-bg: var(--rc-ink-950);
+  --rc-surface: color-mix(in srgb, var(--rc-ink-900) 88%, transparent);
+  --rc-surface-strong: var(--rc-ink-800);
+  --rc-border: var(--rc-ink-700);
+  --rc-text: var(--rc-ink-100);
+  --rc-text-muted: var(--rc-ink-400);
+
+  /* Type */
+  --rc-font-display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
+  --rc-font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --rc-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --rc-fs-hero: clamp(44px, min(9vw, 10vh), 112px);
+  --rc-fs-hud-xl: clamp(40px, 6vw, 84px);
+  --rc-fs-xl: clamp(28px, 3.2vw, 40px);
+  --rc-fs-lg: clamp(22px, 2.2vw, 28px);
+  --rc-fs-md: 20px;
+  --rc-fs-sm: 18px; /* floor for any readable HUD text on PC */
+
+  /* Space (4px grid) */
+  --rc-space-1: 4px;
+  --rc-space-2: 8px;
+  --rc-space-3: 12px;
+  --rc-space-4: 16px;
+  --rc-space-5: 24px;
+  --rc-space-6: 32px;
+  --rc-space-7: 48px;
+
+  /* Shape */
+  --rc-radius-sm: 6px;
+  --rc-radius-md: 10px;
+  --rc-radius-lg: 16px;
+  --rc-border-w: 2px;
+  --rc-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+  --rc-tape-stripes: repeating-linear-gradient(-45deg, var(--rc-tape) 0 12px, var(--rc-ink-950) 12px 24px);
+
+  /* Motion */
+  --rc-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --rc-dur-fast: 120ms;
+  --rc-dur: 220ms;
+
+  /* Safe area (notches, overscan) */
+  --rc-safe-top: max(var(--rc-space-4), env(safe-area-inset-top));
+  --rc-safe-right: max(var(--rc-space-4), env(safe-area-inset-right));
+  --rc-safe-bottom: max(var(--rc-space-4), env(safe-area-inset-bottom));
+  --rc-safe-left: max(var(--rc-space-4), env(safe-area-inset-left));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --rc-dur-fast: 0ms;
+    --rc-dur: 0ms;
+  }
+}

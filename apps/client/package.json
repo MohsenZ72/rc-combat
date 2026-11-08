@@ -1,0 +1,21 @@
+{
+  "name": "@rc/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^9.35.0",
+    "@colyseus/sdk": "^0.18.9",
+    "@rc/game-core": "0.1.0",
+    "@rc/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.6"
+  }
+}

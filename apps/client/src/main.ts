@@ -1,0 +1,81 @@
+import "./styles/tokens.css";
+import "./styles/ui.css";
+import { checkSession, guestLogin, loadSession, type Session } from "./net/api.js";
+import { Phase } from "@rc/shared";
+import type { RaceClient } from "./game/race-client.js";
+import { HudScreen } from "./ui/hud.js";
+import { LobbyScreen, NoticeScreen, ResultsScreen, TitleScreen } from "./ui/menus.js";
+import { ScreenStack } from "./ui/screens.js";
+
+const ui = document.getElementById("ui")!;
+const canvas = document.getElementById("scene") as HTMLCanvasElement;
+const screens = new ScreenStack(ui);
+let session: Session | null = loadSession();
+let client: RaceClient | null = null;
+
+/** Close codes the server uses (see apps/game-server/src/rooms/race-room.ts). */
+const CLOSE_REASONS: Record<number, string> = {
+  4003: "You were disconnected for sending invalid data.",
+  4009: "You are already racing in this match from another tab.",
+};
+
+async function getClient(): Promise<RaceClient> {
+  // The 3D engine and physics are lazy-loaded after the menu is interactive.
+  if (!client) {
+    const { RaceClient } = await import("./game/race-client.js");
+    client = await RaceClient.create(canvas);
+    // Dev-only handle for debugging in the browser console; stripped from production builds.
+    if (import.meta.env.DEV) (window as unknown as { __rc: RaceClient }).__rc = client;
+  }
+  return client;
+}
+
+function showTitle(): void {
+  screens.reset(new TitleScreen(session?.player.nickname ?? null, play));
+}
+
+async function play(nickname: string): Promise<void> {
+  if (!session || session.player.nickname !== nickname || !(await checkSession(session))) {
+    session = await guestLogin(nickname);
+  }
+  const rc = await getClient();
+  rc.clear();
+  const lobby = new LobbyScreen(() => void rc.leave().then(showTitle));
+  rc.on("lobby", (l) => {
+    lobby.update(l);
+    // The roster locks at countdown: swap the lobby for the race HUD.
+    if (l.phase >= Phase.Countdown && screens.top === lobby) {
+      const hud = new HudScreen(rc.track);
+      rc.attachHud(hud);
+      screens.reset(hud);
+    }
+  });
+  rc.on("results", (r) => {
+    rc.attachHud(null);
+    screens.reset(
+      new ResultsScreen(
+        r,
+        rc.slot,
+        () => void play(nickname).catch(() => showTitle()),
+        () => void rc.leave().then(showTitle),
+      ),
+    );
+  });
+  rc.on("connection", (state) => {
+    document.body.dataset.connection = state;
+  });
+  rc.on("closed", ({ code }) => {
+    if (code === 4000 || code === 1000) return; // normal end of match / we left
+    rc.attachHud(null);
+    screens.reset(new NoticeScreen("Disconnected", CLOSE_REASONS[code] ?? "Lost connection to the race server.", "Back to menu", showTitle));
+  });
+  screens.reset(lobby);
+  try {
+    await rc.join(session.token);
+  } catch (err) {
+    screens.reset(new TitleScreen(nickname, play));
+    throw err;
+  }
+}
+
+showTitle();

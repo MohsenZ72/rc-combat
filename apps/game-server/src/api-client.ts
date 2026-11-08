@@ -1,6 +1,10 @@
 import type { MatchOutcome, MatchStartPayload } from "@rc/shared";
-import { gzipSync } from "node:zlib";
+import { promisify } from "node:util";
+import { gzip } from "node:zlib";
 import type { Logger } from "./logger.js";
+
+// Async gzip runs on the libuv threadpool so a big replay never stalls other rooms' ticks.
+const gzipAsync = promisify(gzip);
 
 export interface SessionInfo {
   playerId: string;
@@ -40,7 +44,7 @@ export class HttpBackend implements BackendPort {
   }
 
   async matchFinished(outcome: MatchOutcome, replay: unknown): Promise<void> {
-    const replayGz = gzipSync(Buffer.from(JSON.stringify(replay))).toString("base64");
+    const replayGz = (await gzipAsync(Buffer.from(JSON.stringify(replay)), { level: 6 })).toString("base64");
     await this.withRetry("matchFinished", () =>
       this.request("POST", `/internal/matches/${outcome.matchId}/result`, { outcome, replayGz }, 15000),
     );

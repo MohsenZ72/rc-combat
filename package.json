@@ -15,7 +15,7 @@
     "build": "npm run build:packages && npm run build -w @rc/api -w @rc/game-server -w @rc/client",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "db:up": "docker compose up -d postgres",
+    "db:up": "bash scripts/db-up.sh",
     "db:migrate": "npm run migrate -w @rc/api",
     "dev": "npm run build:packages && concurrently -k -n api,game,client -c blue,magenta,green \"npm run dev -w @rc/api\" \"npm run dev -w @rc/game-server\" \"npm run dev -w @rc/client\"",
     "loadtest": "npm run loadtest -w @rc/game-server --"
