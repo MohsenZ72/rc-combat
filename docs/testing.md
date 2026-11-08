@@ -4,10 +4,10 @@
 
 | Suite | Command | Count | Needs |
 |---|---|---|---|
-| Game core: simulation, physics, race, items, jump, handbrake, terrain, all 10 tracks, anti-cheat, replay, prediction, protocol | `npm test -w @rc/game-core` | 84 | — |
+| Game core: simulation, physics, collisions (impulses, spin, traction, tilt, flips), race, items, jump, handbrake, terrain, all 10 tracks, anti-cheat, replay, prediction, protocol | `npm test -w @rc/game-core` | 103 | — |
 | Game server (`MatchSession`): lifecycle, kicks, reconnection, AFK, abandonment, verdicts, replay | `npm test -w @rc/game-server` | 11 | — |
 | API e2e (real Postgres, incl. cosmetics whitelist) + payout planner | `npm test -w @rc/api` | 17 | `npm run db:up` |
-| Everything | `npm test` | 112 | Postgres |
+| Everything | `npm test` | 131 | Postgres |
 | Type checks | `npm run typecheck` | — | `npm run build:packages` once |
 | Headless 10-bot race (balance + false-positive check) | `npx tsx --conditions=source packages/game-core/scripts/headless-race.ts [seed] [trackId]` | — | — |
 | Track geometry check | `npx tsx --conditions=source packages/game-core/scripts/track-check.ts [trackId]` | — | — |
@@ -29,6 +29,7 @@
 | fake health → rejected | same, plus `health and damage are server-owned: a shield blocks a rocket` |
 | forged result to the API | API `rejects a result whose roster differs…`, `…from another server or with different match parameters`, `rejects duplicate ranks and corrupt replays` |
 | jump abuse | `jump.test.ts` (no bunny-hop, no double jump, validator rejects flying / mid-air lift) |
+| legit knockback never flagged, fake spin rejected | `impact.test.ts` (`a full-speed T-bone flips and spins the victim, with zero anti-cheat anomalies`), `anticheat.test.ts` (`accepts the extra yaw of a decaying impact spin`, `rejects spin that grows without an impact`, `rejects spin above the ceiling…`) |
 | every map is fair and false-positive free | `tracks.test.ts` (geometry, grid, 90 s 10-bot race with zero anomalies per map), ramps and water |
 
 ## Load test results

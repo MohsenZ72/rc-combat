@@ -16,12 +16,13 @@ import {
 import { validateMovement, type KinematicSample } from "./anticheat/movement-validator.js";
 import { SuspicionTracker } from "./anticheat/suspicion.js";
 import { createCar, speedOf, type CarState } from "./car.js";
+import { applyKnock, applyWallImpact, carContact, carMass, resolveCarImpact } from "./impact.js";
 import { angleDelta, clamp, pointSegmentDistSq } from "./math.js";
 import { PhysicsWorld, type Rapier } from "./physics.js";
 import { computeProgress, processGates, rankCars } from "./race.js";
 import { Rng } from "./rng.js";
 import type { Track } from "./track.js";
-import { absoluteSpeedCeiling, applyWallResponse, integrateMovement } from "./vehicle.js";
+import { absoluteSpeedCeiling, integrateMovement } from "./vehicle.js";
 
 export interface Projectile {
   active: boolean;
@@ -99,6 +100,8 @@ export class RaceSimulation {
   private readonly maxRaceTicks: number;
   private events: GameEvent[] = [];
   private readonly prev: KinematicSample[];
+  /** Turbo as the integrator saw it this tick (an EMP later in the tick can cancel it). */
+  private readonly turboUsed: boolean[] = [];
 
   constructor(opts: SimulationOptions) {
     this.track = opts.track;
@@ -120,7 +123,7 @@ export class RaceSimulation {
       car.trackS = proj0.s;
       this.cars.push(car);
       this.suspicion.push(new SuspicionTracker(opts.config.antiCheat, this.tickRate));
-      this.prev.push({ x: car.x, y: car.y, heading: car.heading, vx: 0, vy: 0, z: 0, vz: 0 });
+      this.prev.push({ x: car.x, y: car.y, heading: car.heading, vx: 0, vy: 0, z: 0, vz: 0, spin: 0 });
       this.physics.addCar(slot, car.x, car.y);
     }
     this.boxes = opts.track.boxes.map((b) => ({ x: b.x, y: b.y, respawnTick: 0 }));
@@ -204,6 +207,7 @@ export class RaceSimulation {
       this.handleActions(car, buttons);
       const surface = this.track.surfaceUnder(car.x, car.y, car.heading, car.segmentHint);
       car.surfaceSlope = surface.slope;
+      this.turboUsed[car.slot] = car.turboTicks > 0;
       if (integrateMovement(car, buttons, dt, this.config, car.lastButtons, surface)) {
         this.emit({ type: "jump", tick: this.tick, slot: car.slot });
       }
@@ -216,7 +220,8 @@ export class RaceSimulation {
       car.x = res.x;
       car.y = res.y;
       if (res.hitWall) {
-        const impulse = applyWallResponse(car, res.nx, res.ny, this.config);
+        const impulse = applyWallImpact(car, res.nx, res.ny, this.config, dt);
+        if (impulse > 0) car.impulseThisTick = true;
         if (impulse > 4) this.emit({ type: "collision", tick: this.tick, slot: car.slot, other: "wall", impulse });
       }
     }
@@ -272,7 +277,7 @@ export class RaceSimulation {
       return false;
     };
     if (this.phase !== Phase.Racing) return reject("not_racing");
-    if (car.forfeited || car.finished || car.wreckTicks > 0 || car.stunTicks > 0) return reject("disabled");
+    if (car.forfeited || car.finished || car.wreckTicks > 0 || car.stunTicks > 0 || car.flipTicks > 0) return reject("disabled");
     if (car.item === ItemKind.None) return reject("no_item");
     if (car.itemLockTicks > 0) return reject("item_locked");
     if (car.itemCooldownTicks > 0) return reject("cooldown");
@@ -330,7 +335,7 @@ export class RaceSimulation {
   /** Primary weapon. Cooldown and ammo are enforced in ticks on the server. */
   tryFire(car: CarState): boolean {
     if (this.phase !== Phase.Racing || car.finished || car.forfeited) return false;
-    if (car.wreckTicks > 0 || car.stunTicks > 0) return false;
+    if (car.wreckTicks > 0 || car.stunTicks > 0 || car.flipTicks > 0) return false;
     if (car.boltCooldownTicks > 0 || car.ammo <= 0) return false;
     const bolt = this.config.items.bolt;
     if (!this.spawnProjectile(ProjectileKind.Bolt, car, bolt.speed, bolt.lifetime, -1)) return false;
@@ -372,10 +377,12 @@ export class RaceSimulation {
 
   // ---------------------------------------------------------------- physics helpers
 
+  /**
+   * Car-on-car contacts: capsule shapes, separation through the physics world
+   * (so nobody is pushed into a wall), then an impulse with momentum exchange,
+   * spin from off-centre hits, traction loss and body roll (impact.ts).
+   */
   private resolveCarCollisions(): void {
-    const r = this.config.car.radius;
-    const minDist = r * 2;
-    const e = this.config.car.carRestitution;
     const cars = this.cars;
     for (let i = 0; i < cars.length; i++) {
       const a = cars[i]!;
@@ -385,29 +392,19 @@ export class RaceSimulation {
         if (!this.collidable(b)) continue;
         // A car high enough in the air passes over another one.
         if (Math.abs(a.z - b.z) >= this.config.car.bodyHeight) continue;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const d = Math.hypot(dx, dy);
-        if (d >= minDist) continue;
-        const nx = d > 1e-6 ? dx / d : 1;
-        const ny = d > 1e-6 ? dy / d : 0;
-        const overlap = minDist - d;
-        // Push apart through the physics world so neither ends up in a wall.
-        const ma = this.physics.moveCar(a.slot, a.x, a.y, -nx * overlap * 0.5, -ny * overlap * 0.5);
-        const mb = this.physics.moveCar(b.slot, b.x, b.y, nx * overlap * 0.5, ny * overlap * 0.5);
-        a.x = ma.x; a.y = ma.y;
-        b.x = mb.x; b.y = mb.y;
-        const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-        if (rel < 0) {
-          const jImpulse = (-(1 + e) * rel) / 2;
-          a.vx -= jImpulse * nx; a.vy -= jImpulse * ny;
-          b.vx += jImpulse * nx; b.vy += jImpulse * ny;
-          this.raiseCap(a);
-          this.raiseCap(b);
-          if (jImpulse > 2) {
-            this.emit({ type: "collision", tick: this.tick, slot: a.slot, other: b.slot, impulse: jImpulse });
-          }
-        }
+        const contact = carContact(a, b, this.config);
+        if (!contact) continue;
+        const { nx, ny, depth } = contact;
+        // The heavier car (turbo ram) gives way less.
+        const ma = carMass(a, this.config);
+        const mb = carMass(b, this.config);
+        const shareA = mb / (ma + mb);
+        const ra = this.physics.moveCar(a.slot, a.x, a.y, -nx * depth * shareA, -ny * depth * shareA);
+        const rb = this.physics.moveCar(b.slot, b.x, b.y, nx * depth * (1 - shareA), ny * depth * (1 - shareA));
+        const impulse = resolveCarImpact(a, b, contact, this.config, this.dt);
+        a.x = ra.x; a.y = ra.y;
+        b.x = rb.x; b.y = rb.y;
+        if (impulse > 2) this.emit({ type: "collision", tick: this.tick, slot: a.slot, other: b.slot, impulse });
         a.impulseThisTick = true;
         b.impulseThisTick = true;
       }
@@ -419,17 +416,13 @@ export class RaceSimulation {
     return !car.forfeited && !car.finished && car.wreckTicks === 0;
   }
 
-  private raiseCap(car: CarState): void {
-    car.speedCap = Math.min(absoluteSpeedCeiling(this.config), Math.max(car.speedCap, speedOf(car)));
-  }
-
   private validate(car: CarState): void {
     const prev = this.prev[car.slot]!;
     const verdict = validateMovement(prev, car, {
       dt: this.dt,
       config: this.config,
       track: this.track,
-      turbo: car.turboTicks > 0,
+      turbo: car.turboTicks > 0 || this.turboUsed[car.slot] === true,
       impulse: car.impulseThisTick,
       respawned: car.respawnedThisTick,
       prevSpeedCap: car.speedCap,
@@ -446,6 +439,7 @@ export class RaceSimulation {
       car.vy = verdict.corrected.vy;
       car.z = verdict.corrected.z ?? car.z;
       car.vz = verdict.corrected.vz ?? car.vz;
+      car.spin = verdict.corrected.spin ?? car.spin;
       this.physics.setCarPosition(car.slot, car.x, car.y);
     }
     if (verdict.respawn) this.respawn(car);
@@ -478,6 +472,7 @@ export class RaceSimulation {
     p.vy = car.vy;
     p.z = car.z;
     p.vz = car.vz;
+    p.spin = car.spin;
   }
 
   // ---------------------------------------------------------------- race
@@ -542,6 +537,7 @@ export class RaceSimulation {
     car.z = 0;
     car.vz = 0;
     car.yawRate = 0;
+    this.settle(car);
     car.speedCap = this.config.car.maxSpeed;
     car.hp = this.config.car.maxHealth;
     car.stunTicks = 0;
@@ -555,6 +551,17 @@ export class RaceSimulation {
     car.trackS = p.s;
     this.physics.setCarPosition(car.slot, car.x, car.y);
     this.emit({ type: "respawn", tick: this.tick, slot: car.slot });
+  }
+
+  /** Clears every impact effect (respawn, wreck). */
+  private settle(car: CarState): void {
+    car.spin = 0;
+    car.tractionTicks = 0;
+    car.flipTicks = 0;
+    car.roll = 0;
+    car.rollRate = 0;
+    car.pitch = 0;
+    car.pitchRate = 0;
   }
 
   // ---------------------------------------------------------------- items
@@ -700,16 +707,33 @@ export class RaceSimulation {
       const kx = p.kind === ProjectileKind.Mine ? victim.vx : Math.cos(p.heading);
       const ky = p.kind === ProjectileKind.Mine ? victim.vy : Math.sin(p.heading);
       const kl = Math.hypot(kx, ky) || 1;
+      const vx0 = victim.vx;
+      const vy0 = victim.vy;
       victim.vx = victim.vx * 0.35 + (kx / kl) * kick;
       victim.vy = victim.vy * 0.35 + (ky / kl) * kick;
       victim.impulseThisTick = true;
-      this.raiseCap(victim);
+      const dvx = victim.vx - vx0;
+      const dvy = victim.vy - vy0;
+      if (source === "rocket") {
+        // The blast hits where the rocket is: off-centre hits spin the car as it rolls over.
+        const rx = p.x - victim.x;
+        const ry = p.y - victim.y;
+        const max = this.config.impact.maxSpin;
+        const dSpin = clamp(((rx * ky - ry * kx) / kl) * kick / this.config.impact.yawInertia, -max, max);
+        victim.spin = clamp(victim.spin + dSpin, -max, max);
+        applyKnock(victim, dvx, dvy, dSpin, this.config, this.dt, true);
+      } else {
+        // A mine goes off under the car: it pops up and lurches.
+        applyKnock(victim, dvx, dvy, 0, this.config, this.dt);
+        if (victim.z === 0 && victim.vz === 0) victim.vz = Math.min(this.config.impact.mineHop, this.config.car.jumpVelocity);
+      }
     }
     if (victim.hp <= 0) {
       victim.hp = 0;
       victim.wreckTicks = secondsToTicks(this.config.race.wreckSeconds, this.tickRate);
       victim.vx = 0;
       victim.vy = 0;
+      this.settle(victim);
       victim.impulseThisTick = true;
       this.emit({ type: "wreck", tick: this.tick, slot: victim.slot, by: p.owner === victim.slot ? null : p.owner });
     }
@@ -802,6 +826,13 @@ export class RaceSimulation {
           empTicks: c.empTicks,
           shieldTicks: c.shieldTicks,
           jumpCooldownTicks: c.jumpCooldownTicks,
+          spin: c.spin,
+          roll: c.roll,
+          rollRate: c.rollRate,
+          pitch: c.pitch,
+          pitchRate: c.pitchRate,
+          tractionTicks: c.tractionTicks,
+          flipTicks: c.flipTicks,
         })),
       projectiles: this.projectiles
         .filter((p) => p.active)

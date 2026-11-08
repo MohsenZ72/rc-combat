@@ -8,6 +8,7 @@ function car(speed: number): MovementState {
   return {
     heading: 0, vx: speed, vy: 0, yawRate: 0, speedCap: DEFAULT_CONFIG.car.maxSpeed, drifting: false,
     turboTicks: 0, stunTicks: 0, empTicks: 0, wreckTicks: 0, finished: false, z: 0, vz: 0, jumpCooldownTicks: 0,
+    spin: 0, tractionTicks: 0, flipTicks: 0, roll: 0, rollRate: 0, pitch: 0, pitchRate: 0,
   };
 }
 const run = (c: MovementState, buttons: number, ticks: number, surface = { slope: 0, water: false }) => {

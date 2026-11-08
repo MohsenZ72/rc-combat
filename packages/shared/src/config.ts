@@ -31,9 +31,7 @@ export interface CarConfig {
   driftYawMultiplier: number;
   /** Speed multiplier while drifting (drift is a trade, not a free boost). */
   driftSpeedMultiplier: number;
-  /** Fraction of velocity kept along a wall after a scrape. */
-  wallFriction: number;
-  /** Bounce coefficient against walls. */
+  /** Bounce coefficient against walls (hits slower than `impact.bounceMinSpeed` don't bounce). */
   wallRestitution: number;
   /** Bounce coefficient between cars. */
   carRestitution: number;
@@ -61,6 +59,52 @@ export interface CarConfig {
   /** Take-off speed from a ramp lip and the minimum forward speed to launch. */
   rampVelocity: number;
   rampMinSpeed: number;
+}
+
+/**
+ * Collision response: impulses with momentum exchange, spin from off-centre
+ * contacts, traction loss, body roll/pitch and full flips on very hard hits.
+ * Shared by the server simulation and client prediction (`impact.ts`).
+ */
+export interface ImpactConfig {
+  /** Car mass (all cars are identical; only the ratio matters). */
+  mass: number;
+  /** A car on turbo hits like a heavier car (ramming). */
+  turboMassMultiplier: number;
+  /** Yaw moment of inertia per unit mass (m²). Lower = hits spin the car more. */
+  yawInertia: number;
+  /** Car-to-car contact shape: a capsule along the heading (2.6 m × 1.5 m footprint). */
+  capsuleHalfLength: number;
+  capsuleRadius: number;
+  /** Coulomb friction at car-car and car-wall contacts (turns glancing hits into spin). */
+  carFriction: number;
+  wallFriction: number;
+  /** Normal speed (m/s) below which a wall contact is a scrape, not a bounce. */
+  bounceMinSpeed: number;
+  /** Ceiling and decay (1/s) of the extra yaw rate a hit gives. */
+  maxSpin: number;
+  spinDamping: number;
+  /** Speed change (m/s) from a hit at which traction loss starts and reaches its full length. */
+  tractionMinImpulse: number;
+  tractionFullImpulse: number;
+  /** Longest traction loss (s) and how much grip and steering it removes at its start (0..1). */
+  tractionLossSeconds: number;
+  tractionLossDepth: number;
+  /** Body roll/pitch spring: stiffness (1/s²) and damping (1/s). */
+  tiltStiffness: number;
+  tiltDamping: number;
+  /** Roll/pitch rate (rad/s) per m/s of sideways/forward speed change, and the rate ceiling. */
+  rollKick: number;
+  pitchKick: number;
+  maxTiltRate: number;
+  /** Sideways speed change (m/s) that tips the car into a full roll; the roll's length and hop. */
+  flipImpulse: number;
+  flipSeconds: number;
+  flipHop: number;
+  /** Grip multiplier while rolling (the tyres are off the floor most of the time). */
+  flipGrip: number;
+  /** Vertical pop (m/s) when a mine goes off under a car. */
+  mineHop: number;
 }
 
 export interface ItemConfig {
@@ -156,6 +200,7 @@ export interface AntiCheatConfig {
 
 export interface GameConfig {
   car: CarConfig;
+  impact: ImpactConfig;
   items: ItemConfig;
   race: RaceConfig;
   net: NetConfig;
@@ -180,9 +225,8 @@ export const DEFAULT_CONFIG: GameConfig = {
     driftGrip: 2.6,
     driftYawMultiplier: 1.45,
     driftSpeedMultiplier: 0.94,
-    wallFriction: 0.82,
-    wallRestitution: 0.25,
-    carRestitution: 0.6,
+    wallRestitution: 0.45,
+    carRestitution: 0.55,
     maxHealth: 100,
     jumpVelocity: 9.6,
     gravity: 22,
@@ -198,6 +242,32 @@ export const DEFAULT_CONFIG: GameConfig = {
     waterDrag: 4,
     rampVelocity: 7,
     rampMinSpeed: 12,
+  },
+  impact: {
+    mass: 1,
+    turboMassMultiplier: 1.5,
+    yawInertia: 1.1,
+    capsuleHalfLength: 0.55,
+    capsuleRadius: 0.75,
+    carFriction: 0.35,
+    wallFriction: 0.3,
+    bounceMinSpeed: 2,
+    maxSpin: 7,
+    spinDamping: 2.6,
+    tractionMinImpulse: 3,
+    tractionFullImpulse: 12,
+    tractionLossSeconds: 0.6,
+    tractionLossDepth: 0.75,
+    tiltStiffness: 110,
+    tiltDamping: 7,
+    rollKick: 0.7,
+    pitchKick: 0.4,
+    maxTiltRate: 10,
+    flipImpulse: 12,
+    flipSeconds: 0.9,
+    flipHop: 4.5,
+    flipGrip: 0.2,
+    mineHop: 3.5,
   },
   items: {
     rocket: { speed: 46, turnRate: 3.2, lifetime: 4, damage: 35, stun: 1.0, hitRadius: 0.9, armTime: 0.15 },

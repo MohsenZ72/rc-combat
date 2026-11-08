@@ -39,14 +39,15 @@ Every other client message type, including a known type sent in the wrong encodi
 ```text
 header (14 B): u8 version · u8 phase · u32 tick · i32 raceTick · u16 ack · u8 cars · u8 projectiles · u8 boxes
 boxes: ceil(boxes/8) bytes of availability bits
-car (40 B): u8 slot · f32 x,y,heading,vx,vy · f32 z · i16 vz·100 · u8 hp · u16 flags
+car (48 B): u8 slot · f32 x,y,heading,vx,vy · f32 z · i16 vz·100 · u8 hp · u16 flags
             · u8 item, ammo, lap, nextGate, rank · u8 turbo, stun, emp, shield, jumpCooldown ticks
+            · i16 spin·1000 · i8 roll·40, rollRate·8, pitch·40, pitchRate·8 · u8 traction, flip ticks
 projectile (16 B): u16 id · u8 kind · u8 owner · f32 x,y,heading
 ```
 
 The server encodes each tick **once** and patches only the 2-byte `ack` per recipient (`withSnapshotAck`).
 
-Measured at 30 Hz with 10 cars: about 12 KB/s down and under 0.1 KB/s up per player (see [testing.md](../testing.md)).
+Measured at 30 Hz with 10 cars before protocol version 2: about 12 KB/s down and under 0.1 KB/s up per player (see [testing.md](../testing.md)). Version 2 adds the impact fields (+8 B per car), about 14.5 KB/s (computed, not re-measured). Tilt is quantised (≈0.025 rad), which is visual only; `spin` keeps 0.001 rad/s so prediction stays exact.
 
 ## Client prediction and reconciliation (local car)
 
@@ -55,7 +56,7 @@ Measured at 30 Hz with 10 cars: about 12 KB/s down and under 0.1 KB/s up per pla
 1. Every 33.3 ms the client samples buttons, sends `INPUT(seq)` and applies it locally right away.
 2. On each snapshot, it rewinds the local car to the server state, drops inputs with `seq ≤ ack`, and replays the rest.
 3. Corrections under 4 m are hidden by decaying a visual offset (`visualOffset`, about 80 ms). Larger ones snap.
-4. Other cars are treated as obstacles at their last reported positions, using the server's impulse rule, so bumps are felt immediately.
+4. Other cars are treated as obstacles at their last reported positions and headings, using the server's impact rule (`resolveCarImpact`, applied to our car only), so bumps, spin and tilt are felt immediately.
 
 Rapier is WebAssembly, so wall physics is bit-identical in every browser. The remaining divergence comes from JS `Math.sin/cos` rounding and the obstacle approximation. Both are small and corrected every snapshot.
 

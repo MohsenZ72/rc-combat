@@ -1,5 +1,5 @@
 import { BTN, type GameConfig } from "@rc/shared";
-import { clamp } from "./math.js";
+import { clamp, wrapAngle } from "./math.js";
 
 /** Subset of car state the movement model reads and writes. */
 export interface MovementState {
@@ -18,6 +18,17 @@ export interface MovementState {
   z: number;
   vz: number;
   jumpCooldownTicks: number;
+  /** Extra yaw rate from impacts (rad/s), on top of the steering `yawRate`; decays. */
+  spin: number;
+  /** Ticks of reduced grip and steering left after a hit. */
+  tractionTicks: number;
+  /** Ticks left of a full roll after a very hard hit (controls locked). */
+  flipTicks: number;
+  /** Body roll (+ = roof towards the left) and pitch (+ = nose up) in rad, and their rates. */
+  roll: number;
+  rollRate: number;
+  pitch: number;
+  pitchRate: number;
 }
 
 /** Ground under the car this tick (from the track). */
@@ -87,7 +98,12 @@ export function integrateMovement(
   surface: Surface = FLAT,
 ): boolean {
   const c = config.car;
-  const controlsLocked = car.stunTicks > 0 || car.wreckTicks > 0;
+  const im = config.impact;
+  const flipping = car.flipTicks > 0;
+  const controlsLocked = car.stunTicks > 0 || car.wreckTicks > 0 || flipping;
+  // After a hit the tyres are unsettled: grip and steering come back linearly.
+  const tractionLoss = car.tractionTicks > 0 ? im.tractionLossDepth * clamp(car.tractionTicks / Math.max(1, Math.round(im.tractionLossSeconds / dt)), 0, 1) : 0;
+  const tractionKeep = 1 - tractionLoss;
   const autopilot = car.finished;
   const airborne = car.z > 0;
   let tookOff = false;
@@ -127,8 +143,10 @@ export function integrateMovement(
     const decel = c.handbrakeDeceleration * dt;
     vF = vF > 0 ? Math.max(0, vF - decel) : Math.min(0, vF + decel);
   } else if (throttleBtn && !brakeBtn) {
-    if (vF < 0) vF = Math.min(0, vF + c.brakeDeceleration * dt);
-    else if (vF < forwardCap) vF = Math.min(forwardCap, vF + limits.acceleration * dt);
+    // Rolling backwards: brake first. A rounding-level negative (a car at rest that was just
+    // knocked sideways) counts as stopped, or the car would brake to 0 every tick and never pull away.
+    if (vF < -0.01) vF = Math.min(0, vF + c.brakeDeceleration * dt);
+    else if (vF < forwardCap) vF = Math.min(forwardCap, Math.max(0, vF) + limits.acceleration * dt);
   } else if (brakeBtn) {
     if (vF > 0.5) vF = Math.max(0, vF - c.brakeDeceleration * dt);
     else vF = Math.max(-c.maxReverseSpeed, vF - c.reverseAcceleration * dt);
@@ -151,7 +169,7 @@ export function integrateMovement(
   const speedFactor = clamp(absF / c.fullSteerSpeed, 0, 1) * (1 - c.highSpeedSteerLoss * clamp(absF / c.maxSpeed, 0, 1));
   const yawTarget =
     steer * c.maxYawRate * speedFactor * (car.drifting ? c.driftYawMultiplier : 1) * (empActive ? config.items.emp.steerScale : 1) * (vF < 0 ? -1 : 1) *
-    (grounded ? 1 : c.airSteer);
+    (grounded ? 1 : c.airSteer) * tractionKeep;
   const maxYawStep = YAW_ACCELERATION * dt;
   car.yawRate += clamp(yawTarget - car.yawRate, -maxYawStep, maxYawStep);
   car.yawRate = clamp(car.yawRate, -limits.maxYawRate, limits.maxYawRate);
@@ -160,7 +178,9 @@ export function integrateMovement(
   let vx = fx * vF - fy * vL;
   let vy = fy * vF + fx * vL;
 
-  car.heading += car.yawRate * dt;
+  // Impact spin rotates the chassis on top of steering, then dies away.
+  car.heading += (car.yawRate + car.spin) * dt;
+  car.spin = Math.abs(car.spin) < 1e-3 ? 0 : car.spin * Math.exp(-im.spinDamping * dt);
   if (car.heading > Math.PI) car.heading -= Math.PI * 2;
   else if (car.heading <= -Math.PI) car.heading += Math.PI * 2;
 
@@ -171,7 +191,8 @@ export function integrateMovement(
   vL = vx * -fy + vy * fx;
   // In the air the tyres do not grip, so the car keeps sliding along its old line.
   if (grounded) {
-    const grip = (handbrake ? c.handbrakeGrip : car.drifting ? c.driftGrip : c.grip) * (surface.water ? c.waterGripMultiplier : 1);
+    const grip =
+      (handbrake ? c.handbrakeGrip : car.drifting ? c.driftGrip : c.grip) * (surface.water ? c.waterGripMultiplier : 1) * tractionKeep * (flipping ? im.flipGrip : 1);
     vL *= Math.exp(-grip * dt);
   }
   vx = fx * vF - fy * vL;
@@ -200,20 +221,38 @@ export function integrateMovement(
       car.vy *= c.landingSpeedKeep;
     }
   }
+  if (car.tractionTicks > 0) car.tractionTicks--;
+  integrateTilt(car, dt, config);
   return tookOff;
 }
 
 /**
- * Velocity response after the physics world stopped the car against a wall.
- * Removes the into-wall component with a small bounce and scrapes speed.
+ * Body roll and pitch: a damped spring back to level after a hit kicked it,
+ * or a scripted full roll while flipping (ends upright on its wheels).
  */
-export function applyWallResponse(car: { vx: number; vy: number }, nx: number, ny: number, config: GameConfig): number {
-  const vn = car.vx * nx + car.vy * ny;
-  if (vn >= 0) return 0;
-  const e = config.car.wallRestitution;
-  car.vx -= (1 + e) * vn * nx;
-  car.vy -= (1 + e) * vn * ny;
-  car.vx *= config.car.wallFriction;
-  car.vy *= config.car.wallFriction;
-  return -vn;
+export function integrateTilt(car: MovementState, dt: number, config: GameConfig): void {
+  const im = config.impact;
+  if (car.flipTicks > 0) {
+    car.roll = wrapAngle(car.roll + car.rollRate * dt);
+    car.flipTicks--;
+    if (car.flipTicks === 0) {
+      car.roll = 0;
+      car.rollRate = 0;
+    }
+  } else if (car.roll !== 0 || car.rollRate !== 0) {
+    car.rollRate += (-im.tiltStiffness * car.roll - im.tiltDamping * car.rollRate) * dt;
+    car.roll += car.rollRate * dt;
+    if (Math.abs(car.roll) < 1e-4 && Math.abs(car.rollRate) < 1e-3) {
+      car.roll = 0;
+      car.rollRate = 0;
+    }
+  }
+  if (car.pitch !== 0 || car.pitchRate !== 0) {
+    car.pitchRate += (-im.tiltStiffness * car.pitch - im.tiltDamping * car.pitchRate) * dt;
+    car.pitch += car.pitchRate * dt;
+    if (Math.abs(car.pitch) < 1e-4 && Math.abs(car.pitchRate) < 1e-3) {
+      car.pitch = 0;
+      car.pitchRate = 0;
+    }
+  }
 }

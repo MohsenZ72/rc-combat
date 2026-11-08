@@ -6,7 +6,7 @@
  * inventory, score, rank or "I finished" — those message types do not exist.
  */
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export const MSG = {
   /** C→S binary: u16 seq, u8 buttons. */
@@ -159,6 +159,14 @@ export interface CarSnapshot {
   empTicks: number;
   shieldTicks: number;
   jumpCooldownTicks: number;
+  /** Impact response: extra yaw rate (rad/s), body roll/pitch (rad) and rates, traction-loss and flip ticks. */
+  spin: number;
+  roll: number;
+  rollRate: number;
+  pitch: number;
+  pitchRate: number;
+  tractionTicks: number;
+  flipTicks: number;
 }
 
 export interface ProjectileSnapshot {
@@ -184,10 +192,16 @@ export interface Snapshot {
 }
 
 const HEADER_BYTES = 1 + 1 + 4 + 4 + 2 + 1 + 1 + 1;
-const CAR_BYTES = 1 + 4 * 5 + 4 + 2 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 5;
+const CAR_BYTES = 1 + 4 * 5 + 4 + 2 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 5 + 2 + 4 + 2;
 const PROJECTILE_BYTES = 2 + 1 + 1 + 4 * 3;
 
 const clampU8 = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+const clampI8 = (n: number) => Math.max(-128, Math.min(127, Math.round(n)));
+const clampI16 = (n: number) => Math.max(-32768, Math.min(32767, Math.round(n)));
+/** Fixed-point scales for the impact fields. */
+const SPIN_SCALE = 1000;
+const TILT_SCALE = 40;
+const TILT_RATE_SCALE = 8;
 
 export function encodeSnapshot(s: Snapshot): Uint8Array {
   const boxBytes = Math.ceil(s.boxes.length / 8);
@@ -229,6 +243,13 @@ export function encodeSnapshot(s: Snapshot): Uint8Array {
     v.setUint8(o, clampU8(c.empTicks)); o += 1;
     v.setUint8(o, clampU8(c.shieldTicks)); o += 1;
     v.setUint8(o, clampU8(c.jumpCooldownTicks)); o += 1;
+    v.setInt16(o, clampI16(c.spin * SPIN_SCALE), true); o += 2;
+    v.setInt8(o, clampI8(c.roll * TILT_SCALE)); o += 1;
+    v.setInt8(o, clampI8(c.rollRate * TILT_RATE_SCALE)); o += 1;
+    v.setInt8(o, clampI8(c.pitch * TILT_SCALE)); o += 1;
+    v.setInt8(o, clampI8(c.pitchRate * TILT_RATE_SCALE)); o += 1;
+    v.setUint8(o, clampU8(c.tractionTicks)); o += 1;
+    v.setUint8(o, clampU8(c.flipTicks)); o += 1;
   }
   for (const p of s.projectiles) {
     v.setUint16(o, p.id & 0xffff, true); o += 2;
@@ -285,7 +306,17 @@ export function decodeSnapshot(payload: unknown): DecodeResult<Snapshot> {
     const empTicks = v.getUint8(o); o += 1;
     const shieldTicks = v.getUint8(o); o += 1;
     const jumpCooldownTicks = v.getUint8(o); o += 1;
-    cars.push({ slot, x, y, heading, vx, vy, z, vz, hp, flags, item, ammo, lap, nextGate, rank, turboTicks, stunTicks, empTicks, shieldTicks, jumpCooldownTicks });
+    const spin = v.getInt16(o, true) / SPIN_SCALE; o += 2;
+    const roll = v.getInt8(o) / TILT_SCALE; o += 1;
+    const rollRate = v.getInt8(o) / TILT_RATE_SCALE; o += 1;
+    const pitch = v.getInt8(o) / TILT_SCALE; o += 1;
+    const pitchRate = v.getInt8(o) / TILT_RATE_SCALE; o += 1;
+    const tractionTicks = v.getUint8(o); o += 1;
+    const flipTicks = v.getUint8(o); o += 1;
+    cars.push({
+      slot, x, y, heading, vx, vy, z, vz, hp, flags, item, ammo, lap, nextGate, rank, turboTicks, stunTicks, empTicks, shieldTicks, jumpCooldownTicks,
+      spin, roll, rollRate, pitch, pitchRate, tractionTicks, flipTicks,
+    });
   }
   const projectiles: ProjectileSnapshot[] = [];
   for (let i = 0; i < projectileCount; i++) {

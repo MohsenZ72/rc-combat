@@ -12,6 +12,8 @@ export interface KinematicSample {
   /** Height and vertical speed; omitted means on the floor. */
   z?: number;
   vz?: number;
+  /** Extra yaw rate from impacts (rad/s); omitted means none. */
+  spin?: number;
 }
 
 export interface MovementContext {
@@ -58,7 +60,7 @@ export function validateMovement(prev: KinematicSample, next: KinematicSample, c
   const { config, dt } = ctx;
   const ac = config.antiCheat;
 
-  const values = [next.x, next.y, next.heading, next.vx, next.vy, next.z ?? 0, next.vz ?? 0];
+  const values = [next.x, next.y, next.heading, next.vx, next.vy, next.z ?? 0, next.vz ?? 0, next.spin ?? 0];
   if (!values.every(isFiniteNumber)) {
     return { violations: [{ kind: "invalid_state", detail: "non-finite kinematics" }], corrected: null, respawn: true };
   }
@@ -104,8 +106,20 @@ export function validateMovement(prev: KinematicSample, next: KinematicSample, c
     }
   }
 
-  // Rotation: heading change per tick bounded by max yaw rate.
-  const maxYaw = limits.maxYawRate * dt * (1 + ac.rotationTolerance) + 1e-6;
+  // Impact spin: bounded, and it can only grow on a tick with an impact (otherwise it only decays).
+  const maxSpin = config.impact.maxSpin;
+  const prevSpin = Math.min(Math.abs(prev.spin ?? 0), maxSpin);
+  const nextSpin = next.spin ?? 0;
+  if (Math.abs(nextSpin) > maxSpin * (1 + ac.rotationTolerance)) {
+    violations.push({ kind: "rotation", detail: `spin ${nextSpin.toFixed(2)} rad/s > ${maxSpin}` });
+    fix().spin = Math.sign(nextSpin) * maxSpin;
+  } else if (!ctx.impulse && Math.abs(nextSpin) > prevSpin + 1e-6) {
+    violations.push({ kind: "rotation", detail: `spin grew without an impact: ${prevSpin.toFixed(2)} → ${Math.abs(nextSpin).toFixed(2)}` });
+    fix().spin = Math.sign(nextSpin) * prevSpin;
+  }
+
+  // Rotation: heading change per tick bounded by max yaw rate plus the spin carried into the tick.
+  const maxYaw = (limits.maxYawRate + prevSpin) * dt * (1 + ac.rotationTolerance) + 1e-6;
   const dHeading = angleDelta(prev.heading, next.heading);
   if (Math.abs(dHeading) > maxYaw) {
     violations.push({ kind: "rotation", detail: `yaw ${(dHeading / dt).toFixed(2)} rad/s` });

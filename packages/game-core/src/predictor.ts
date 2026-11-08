@@ -1,7 +1,8 @@
 import { CAR_FLAG, type CarSnapshot, type GameConfig } from "@rc/shared";
 import { PhysicsWorld, type Rapier } from "./physics.js";
 import type { Track } from "./track.js";
-import { applyWallResponse, integrateMovement, type MovementState } from "./vehicle.js";
+import { applyWallImpact, carContact, resolveCarImpact, type ImpactBody } from "./impact.js";
+import { integrateMovement, type MovementState } from "./vehicle.js";
 
 interface PendingInput {
   seq: number;
@@ -18,8 +19,11 @@ export interface Obstacle {
   x: number;
   y: number;
   z: number;
+  heading: number;
   vx: number;
   vy: number;
+  spin?: number;
+  turboTicks?: number;
 }
 
 /**
@@ -39,6 +43,11 @@ export class CarPredictor {
   private ackedButtons = 0;
   private prevButtons = 0;
   private obstacles: Obstacle[] = [];
+  /** Scratch body for the obstacle side of a predicted bump. */
+  private readonly other: ImpactBody = {
+    x: 0, y: 0, heading: 0, vx: 0, vy: 0, z: 0, vz: 0, yawRate: 0, spin: 0, tractionTicks: 0, flipTicks: 0,
+    roll: 0, rollRate: 0, pitch: 0, pitchRate: 0, speedCap: 0, turboTicks: 0,
+  };
   private segmentHint = -1;
   private trackS = 0;
   /** Size of the last correction in metres (for debugging/visual smoothing). */
@@ -52,6 +61,7 @@ export class CarPredictor {
       x: pose.x, y: pose.y, heading: pose.heading, vx: 0, vy: 0, yawRate: 0, speedCap: config.car.maxSpeed,
       drifting: false, turboTicks: 0, stunTicks: 0, empTicks: 0, wreckTicks: 0, finished: false,
       z: 0, vz: 0, jumpCooldownTicks: 0,
+      spin: 0, tractionTicks: 0, flipTicks: 0, roll: 0, rollRate: 0, pitch: 0, pitchRate: 0,
     };
     this.physics.addCar(this.slot, pose.x, pose.y);
   }
@@ -92,6 +102,13 @@ export class CarPredictor {
     s.wreckTicks = (server.flags & CAR_FLAG.WRECKED) !== 0 ? 1 : 0;
     s.finished = (server.flags & CAR_FLAG.FINISHED) !== 0;
     s.drifting = (server.flags & CAR_FLAG.DRIFTING) !== 0;
+    s.spin = server.spin;
+    s.tractionTicks = server.tractionTicks;
+    s.flipTicks = server.flipTicks;
+    s.roll = server.roll;
+    s.rollRate = server.rollRate;
+    s.pitch = server.pitch;
+    s.pitchRate = server.pitchRate;
     s.speedCap = Math.max(this.config.car.maxSpeed, Math.hypot(server.vx, server.vy));
     const proj = this.track.project(s.x, s.y, this.segmentHint);
     this.segmentHint = proj.segment;
@@ -121,7 +138,7 @@ export class CarPredictor {
     const res = this.physics.moveCar(this.slot, s.x, s.y, s.vx * this.dt, s.vy * this.dt);
     s.x = res.x;
     s.y = res.y;
-    if (res.hitWall) applyWallResponse(s, res.nx, res.ny, this.config);
+    if (res.hitWall) applyWallImpact(s, res.nx, res.ny, this.config, this.dt);
     this.bumpObstacles();
     // Mirror the server's ramp launch so take-offs feel instant.
     const proj = this.track.project(s.x, s.y, this.segmentHint);
@@ -132,27 +149,21 @@ export class CarPredictor {
     this.trackS = proj.s;
   }
 
-  /** Same impulse rule as the server's car-car collision, with the other car held still. */
+  /** Same impulse rule as the server's car-car collision; the other car is not moved. */
   private bumpObstacles(): void {
     const s = this.state;
-    const minDist = this.config.car.radius * 2;
-    for (const o of this.obstacles) {
-      if (Math.abs(o.z - s.z) >= this.config.car.bodyHeight) continue;
-      const dx = s.x - o.x;
-      const dy = s.y - o.y;
-      const d = Math.hypot(dx, dy);
-      if (d >= minDist) continue;
-      const nx = d > 1e-6 ? dx / d : 1;
-      const ny = d > 1e-6 ? dy / d : 0;
-      const push = this.physics.moveCar(this.slot, s.x, s.y, nx * (minDist - d), ny * (minDist - d));
+    const o = this.other;
+    for (const ob of this.obstacles) {
+      if (Math.abs(ob.z - s.z) >= this.config.car.bodyHeight) continue;
+      const contact = carContact(s, ob, this.config);
+      if (!contact) continue;
+      // Contact normal points from us to the obstacle: back off by the full overlap.
+      const push = this.physics.moveCar(this.slot, s.x, s.y, -contact.nx * contact.depth, -contact.ny * contact.depth);
+      o.x = ob.x; o.y = ob.y; o.z = ob.z; o.heading = ob.heading; o.vx = ob.vx; o.vy = ob.vy;
+      o.spin = ob.spin ?? 0; o.turboTicks = ob.turboTicks ?? 0;
+      resolveCarImpact(s, o, contact, this.config, this.dt, false);
       s.x = push.x;
       s.y = push.y;
-      const rel = (s.vx - o.vx) * nx + (s.vy - o.vy) * ny;
-      if (rel < 0) {
-        const j = (-(1 + this.config.car.carRestitution) * rel) / 2;
-        s.vx += j * nx;
-        s.vy += j * ny;
-      }
     }
   }
 

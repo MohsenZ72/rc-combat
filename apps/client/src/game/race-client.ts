@@ -17,9 +17,39 @@ interface Pose3 {
   y: number;
   z: number;
   heading: number;
+  /** Body roll and pitch from impacts (rad). */
+  roll: number;
+  pitch: number;
 }
 
-const poseOf = (s: { x: number; y: number; z: number; heading: number }): Pose3 => ({ x: s.x, y: s.y, z: s.z, heading: s.heading });
+const poseOf = (s: { x: number; y: number; z: number; heading: number; roll: number; pitch: number }): Pose3 => ({
+  x: s.x, y: s.y, z: s.z, heading: s.heading, roll: s.roll, pitch: s.pitch,
+});
+
+/** Car body proportions for tilting about the centre of mass (2.6 m × 1.5 m footprint). */
+const BODY_HALF_LENGTH = 1.3;
+const BODY_HALF_WIDTH = 0.75;
+const BODY_CENTRE_HEIGHT = 0.42;
+
+/**
+ * Where to put a car's root (pivot on the floor) so the body rolls and pitches
+ * about its centre of mass and never sinks into the floor.
+ * Roll + = roof towards the car's left; pitch + = nose up.
+ */
+function tiltOffset(heading: number, roll: number, pitch: number): { dx: number; dy: number; lift: number } {
+  const c = BODY_CENTRE_HEIGHT;
+  const sr = Math.sin(roll);
+  const cr = Math.cos(roll);
+  const sp = Math.sin(pitch);
+  const cp = Math.cos(pitch);
+  // Rotating about the floor pivot swings the centre sideways/backwards: move the pivot to cancel it.
+  const side = -c * sr;
+  const back = c * sp;
+  const lift = c * (1 - cr * cp) + Math.max(0, BODY_HALF_WIDTH * Math.abs(sr) + c * Math.abs(cr) - c, BODY_HALF_LENGTH * Math.abs(sp) + c * Math.abs(cp) - c);
+  const fx = Math.cos(heading);
+  const fy = Math.sin(heading);
+  return { dx: -fy * side + fx * back, dy: fx * side + fy * back, lift };
+}
 
 type ClientEvents = {
   lobby: LobbyState;
@@ -288,6 +318,13 @@ export class RaceClient extends Emitter<ClientEvents> {
           break;
         case "jump":
           break;
+        case "collision": {
+          // Sparks where it hurts: hard bumps and wall hits.
+          if (e.impulse < 6) break;
+          const p = this.cars.get(e.slot)?.root.position;
+          if (p) this.fx.burst("sparks", p.x, p.y + 0.5, p.z, Math.min(2, e.impulse / 10));
+          break;
+        }
         case "item_rejected":
           if (e.reason === "no_target") this.hud?.pushFeed("No target in range", true);
           break;
@@ -395,6 +432,8 @@ export class RaceClient extends Emitter<ClientEvents> {
       let heading = c.heading;
       let vx = c.vx;
       let vy = c.vy;
+      let roll = c.roll;
+      let pitch = c.pitch;
       if (c.slot === this.mySlot && this.predictor?.ready) {
         const p = this.predictor.state;
         // Blend between the last two 30 Hz prediction steps so the car moves smoothly at any frame rate.
@@ -405,6 +444,8 @@ export class RaceClient extends Emitter<ClientEvents> {
         y = a.y + (b.y - a.y) * alpha + this.visualOffset.y;
         z = a.z + (b.z - a.z) * alpha;
         heading = lerpAngle(a.heading, b.heading, alpha);
+        roll = lerpAngle(a.roll, b.roll, alpha);
+        pitch = a.pitch + (b.pitch - a.pitch) * alpha;
         vx = p.vx;
         vy = p.vy;
         // C (or R3) flips the chase camera to look behind; snap on toggle so it doesn't swing through the car.
@@ -421,7 +462,11 @@ export class RaceClient extends Emitter<ClientEvents> {
       this.headings.set(c.slot, heading);
       const yawRate = dt > 0 ? dh / dt : 0;
       const ground = this.groundHeight(c.slot, x, y);
-      view.update(x, y, ground + z, heading, forwardSpeed, yawRate, c.flags, dt, now);
+      // Impact tilt: the whole car rolls/pitches about its centre of mass (a flip is a full roll).
+      const tilt = tiltOffset(heading, roll, pitch);
+      view.update(x + tilt.dx, y + tilt.dy, ground + z + tilt.lift, heading, forwardSpeed, yawRate, c.flags, dt, now);
+      view.root.rotation.x = roll;
+      view.root.rotation.z += pitch;
       this.carEffects(c.slot, x, y, ground, z, heading, Math.abs(forwardSpeed), c.flags);
       mapDots.push({ x, y, color: this.seats.get(c.slot)?.color ?? "#ccc", me: c.slot === this.mySlot });
       this.placeTag(c.slot, x, y);

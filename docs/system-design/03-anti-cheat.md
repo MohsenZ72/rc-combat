@@ -14,6 +14,7 @@ So the classic browser cheats (editing memory, patching JS, forging packets to c
 | Speed hack (fake speed) | No such message; integrator hard cap; validator speed check | `vehicle.ts`, validator | `rejects and corrects a speed hack` |
 | Speed hack by **input flooding** | One input per tick, token bucket, bounded queue | `input-guard.ts`, `match-session.ts › step` | `speed hack by input flooding gains no distance` |
 | Impossible acceleration / rotation | Validator acceleration and yaw limits | validator | `rejects impossible acceleration/rotation` |
+| Fake spin (rotating faster by "being hit") | Spin is server-made by impacts only; bounded, may only decay between impacts | validator, `impact.ts` | `rejects spin that grows without an impact`, `rejects spin above the ceiling…` |
 | Wall clipping / out of bounds | Rapier sweep (no tunnelling) + lateral bounds check, then respawn | `physics.ts`, validator | `walls stop a car…`, `detects wall clipping…` |
 | Checkpoint skipping / shortcuts | Ordered gates; forward crossing of a gate *ahead* = `checkpoint_skip`; progress capped to confirmed gates | `race.ts` | `rejects a skipped checkpoint` |
 | Reverse-route / finish-line farming | Only the expected gate counts; laps need all gates | `race.ts` | `does not count a lap from crossing the finish line back and forth` |
@@ -39,7 +40,8 @@ So the classic browser cheats (editing memory, patching JS, forging packets to c
    * NaN/∞ → `invalid_state` (respawn)
    * speed above the legal cap (with decay after turbo or knockback) → `speed` (clamp)
    * speed gain above engine power (plus gravity on a downhill grade) → `acceleration` (clamp), unless an impulse excuses it
-   * yaw change above the maximum rate → `rotation` (clamp)
+   * yaw change above the maximum steering rate plus the impact spin carried into the tick → `rotation` (clamp)
+   * impact spin above `impact.maxSpin`, or growing on a tick without an impact → `rotation` (clamp)
    * distance above `max(speed)·dt + slack` → `teleport` (revert to previous position)
    * height above `v²/2g`, take-off speed too high, lift while airborne → `jump` (clamp)
    * centre beyond the walls → `wall_clip` or `out_of_bounds` (respawn at the last checkpoint)

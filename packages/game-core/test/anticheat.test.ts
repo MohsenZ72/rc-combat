@@ -53,6 +53,34 @@ describe("movement validation", () => {
     sim.dispose();
   });
 
+  it("accepts the extra yaw of a decaying impact spin", () => {
+    const prev = { ...sampleOnTrack(20), spin: 6 };
+    const yaw = (DEFAULT_CONFIG.car.maxYawRate * DEFAULT_CONFIG.car.driftYawMultiplier + 6) * dt;
+    const next = { ...advance(prev, 20), heading: prev.heading - yaw, spin: 6 * Math.exp(-DEFAULT_CONFIG.impact.spinDamping * dt) };
+    const verdict = validateMovement(prev, next, ctx());
+    expect(verdict.violations).toEqual([]);
+  });
+
+  it("rejects spin that grows without an impact", () => {
+    const prev = { ...sampleOnTrack(20), spin: 1 };
+    const verdict = validateMovement(prev, { ...advance(prev, 20), spin: 5 }, ctx());
+    expect(verdict.violations.map((v) => v.kind)).toContain("rotation");
+    expect(verdict.corrected?.spin).toBe(1);
+  });
+
+  it("rejects spin above the ceiling even on an impact tick", () => {
+    const prev = sampleOnTrack(20);
+    const verdict = validateMovement(prev, { ...advance(prev, 20), spin: -40 }, ctx({ impulse: true }));
+    expect(verdict.violations.map((v) => v.kind)).toContain("rotation");
+    expect(verdict.corrected?.spin).toBe(-DEFAULT_CONFIG.impact.maxSpin);
+  });
+
+  it("a heading change beyond steering plus spin is still rejected", () => {
+    const prev = { ...sampleOnTrack(20), spin: 2 };
+    const verdict = validateMovement(prev, { ...advance(prev, 20), heading: prev.heading + 1, spin: 1.8 }, ctx({ impulse: true }));
+    expect(verdict.violations.map((v) => v.kind)).toContain("rotation");
+  });
+
   it("rejects and corrects a speed hack", () => {
     const prev = sampleOnTrack(29);
     const next = advance(prev, 60, 29 * dt);

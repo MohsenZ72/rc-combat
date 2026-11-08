@@ -93,14 +93,19 @@ export class PhysicsWorld {
     for (let i = 0; i < n; i++) {
       const hit = this.controller.computedCollision(i);
       if (!hit || !hit.collider || !this.wallHandles.has(hit.collider.handle)) continue;
-      hitWall = true;
+      // Rapier can report a NaN normal for a degenerate contact (e.g. exactly on a polyline vertex): skip it.
+      if (!Number.isFinite(hit.normal1.x) || !Number.isFinite(hit.normal1.y)) continue;
       nx += hit.normal1.x;
       ny += hit.normal1.y;
     }
-    if (hitWall) {
-      const len = Math.hypot(nx, ny) || 1;
+    const len = Math.hypot(nx, ny);
+    if (len > 1e-9) {
+      hitWall = true;
       nx /= len;
       ny /= len;
+    } else {
+      nx = 0;
+      ny = 0;
     }
     const nxPos = x + moved.x;
     const nyPos = y + moved.y;

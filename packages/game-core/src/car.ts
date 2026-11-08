@@ -16,6 +16,14 @@ export interface CarState {
   vz: number;
   jumpCooldownTicks: number;
   yawRate: number;
+  /** Impact response (see impact.ts): extra yaw, traction loss, flip, body roll/pitch. */
+  spin: number;
+  tractionTicks: number;
+  flipTicks: number;
+  roll: number;
+  rollRate: number;
+  pitch: number;
+  pitchRate: number;
   /** Current legal speed ceiling; decays back to base after turbo/knockback. */
   speedCap: number;
   drifting: boolean;
@@ -72,6 +80,13 @@ export function createCar(slot: number, x: number, y: number, heading: number, m
     vz: 0,
     jumpCooldownTicks: 0,
     yawRate: 0,
+    spin: 0,
+    tractionTicks: 0,
+    flipTicks: 0,
+    roll: 0,
+    rollRate: 0,
+    pitch: 0,
+    pitchRate: 0,
     speedCap: maxSpeed,
     drifting: false,
     hp: maxHealth,
