@@ -1,4 +1,4 @@
-import { CarPredictor, loadRapier, Track, TRACKS, WORKSHOP_CIRCUIT } from "@rc/game-core";
+import { CarPredictor, lerpAngle, loadRapier, Track, TRACKS, WORKSHOP_CIRCUIT } from "@rc/game-core";
 import { CAR_FLAG, DEFAULT_CONFIG, ITEM_NAMES, mergeConfig, Phase, type CarSnapshot, type GameConfig, type GameEvent, type Snapshot } from "@rc/shared";
 import { Connection, type LobbyState, type ResultsMessage, type SeatInfo, type Welcome } from "../net/connection.js";
 import { CarViews } from "../render/cars.js";
@@ -8,6 +8,15 @@ import type { HudScreen } from "../ui/hud.js";
 import { Emitter } from "./emitter.js";
 import { InputController } from "./input.js";
 import { SnapshotInterpolator } from "./interpolation.js";
+
+interface Pose3 {
+  x: number;
+  y: number;
+  z: number;
+  heading: number;
+}
+
+const poseOf = (s: { x: number; y: number; z: number; heading: number }): Pose3 => ({ x: s.x, y: s.y, z: s.z, heading: s.heading });
 
 type ClientEvents = {
   lobby: LobbyState;
@@ -24,10 +33,14 @@ type ClientEvents = {
  * server snapshots.
  */
 export class RaceClient extends Emitter<ClientEvents> {
-  readonly track: Track;
+  /** Current map; replaced when a match on another track starts. */
+  track: Track;
+  private readonly tracks = new Map<string, Track>();
   private readonly world: World;
   private readonly cars: CarViews;
-  private readonly fx: Effects;
+  private fx: Effects;
+  /** Track segment hint per car for fast ground-height lookups. */
+  private groundHints = new Map<number, number>();
   private readonly net = new Connection();
   private readonly input = new InputController();
   private config: GameConfig = DEFAULT_CONFIG;
@@ -39,9 +52,8 @@ export class RaceClient extends Emitter<ClientEvents> {
   private phase: Phase = Phase.Lobby;
   private latest: Snapshot | null = null;
   private seq = 0;
-  private inputTimer = 0;
+  private inputActive = false;
   private inputAccumulator = 0;
-  private lastInputAt = 0;
   private lastFrame = performance.now();
   private visualOffset = { x: 0, y: 0 };
   private tags = new Map<number, HTMLElement>();
@@ -50,13 +62,16 @@ export class RaceClient extends Emitter<ClientEvents> {
   private lastMapDraw = 0;
   private cameraSnapped = false;
   private lookingBack = false;
+  /** Predicted pose before/after the latest 30 Hz step; rendering blends between them. */
+  private predPrev: Pose3 | null = null;
+  private predCurr: Pose3 | null = null;
   private readonly reportedErrors = new Set<string>();
 
   private constructor(canvas: HTMLCanvasElement, rapier: Awaited<ReturnType<typeof loadRapier>>) {
     super();
-    this.track = new Track(TRACKS[WORKSHOP_CIRCUIT.id]!);
+    this.track = this.trackFor(WORKSHOP_CIRCUIT.id);
     this.world = new World(canvas);
-    this.world.buildTrack(this.track);
+    this.world.setTrack(this.track);
     this.cars = new CarViews(this.world, this.world.scene);
     this.fx = new Effects(this.world.scene, this.track);
     this.interp = new SnapshotInterpolator(this.config.net.tickRate, this.config.net.interpolationDelayMs);
@@ -87,7 +102,7 @@ export class RaceClient extends Emitter<ClientEvents> {
     this.tags.clear();
   }
 
-  async join(token: string): Promise<void> {
+  async join(token: string, track = "any"): Promise<void> {
     this.resetMatch();
     this.net.clear();
     this.net.on("welcome", (w) => this.onWelcome(w));
@@ -103,7 +118,7 @@ export class RaceClient extends Emitter<ClientEvents> {
       this.stopInput();
       this.emit("closed", c);
     });
-    await this.net.join(token);
+    await this.net.join(token, track);
   }
 
   async leave(): Promise<void> {
@@ -133,8 +148,26 @@ export class RaceClient extends Emitter<ClientEvents> {
 
   // ------------------------------------------------------------ network handlers
 
+  private trackFor(id: string): Track {
+    let t = this.tracks.get(id);
+    if (!t) {
+      const def = TRACKS[id] ?? TRACKS[WORKSHOP_CIRCUIT.id]!;
+      t = new Track(def);
+      this.tracks.set(id, t);
+    }
+    return t;
+  }
+
   private onWelcome(w: Welcome): void {
     this.mySlot = w.slot;
+    const track = this.trackFor(w.trackId);
+    if (track !== this.track) {
+      this.track = track;
+      this.world.setTrack(track);
+      this.fx.dispose();
+      this.fx = new Effects(this.world.scene, track);
+      this.groundHints.clear();
+    }
     this.seats = new Map(w.seats.map((s) => [s.slot, s]));
     // Mirror the server's tick parameters so prediction integrates identically.
     this.config = mergeConfig(DEFAULT_CONFIG, { net: { tickRate: w.tickRate, snapshotDivisor: w.snapshotDivisor }, race: { laps: w.laps } });
@@ -163,10 +196,18 @@ export class RaceClient extends Emitter<ClientEvents> {
         if (Math.hypot(dx, dy) < 4) {
           this.visualOffset.x += dx;
           this.visualOffset.y += dy;
+          // Shift the interpolation endpoints by the correction too, so the blend stays continuous.
+          if (this.predPrev) {
+            this.predPrev.x -= dx;
+            this.predPrev.y -= dy;
+          }
         } else {
           this.visualOffset = { x: 0, y: 0 };
+          this.predPrev = null;
         }
       }
+      this.predCurr = poseOf(this.predictor.state);
+      this.predPrev ??= { ...this.predCurr };
       this.updateHud(me, s);
       // Other cars become obstacles for prediction, so bumps are felt immediately.
       this.predictor.setObstacles(
@@ -246,33 +287,50 @@ export class RaceClient extends Emitter<ClientEvents> {
   // ------------------------------------------------------------ input loop
 
   private startInput(): void {
-    if (this.inputTimer) return;
+    if (this.inputActive) return;
     this.input.attach();
-    this.lastInputAt = performance.now();
+    this.inputActive = true;
     this.inputAccumulator = 0;
-    const tickMs = 1000 / this.config.net.tickRate;
-    // Send exactly one input per server tick; the accumulator absorbs timer drift.
-    this.inputTimer = window.setInterval(() => {
-      const now = performance.now();
-      this.inputAccumulator += now - this.lastInputAt;
-      this.lastInputAt = now;
-      let sends = 0;
-      while (this.inputAccumulator >= tickMs && sends < 3) {
-        this.inputAccumulator -= tickMs;
-        sends++;
-        const buttons = this.input.sample();
-        this.seq = (this.seq + 1) & 0xffff;
-        this.net.sendInput(this.seq, buttons);
-        this.predictor?.applyInput(this.seq, buttons, this.phase === Phase.Racing);
-      }
-      if (this.inputAccumulator > tickMs * 3) this.inputAccumulator = 0;
-    }, tickMs / 2);
+    document.addEventListener("visibilitychange", this.onVisibility);
   }
 
   private stopInput(): void {
-    if (this.inputTimer) window.clearInterval(this.inputTimer);
-    this.inputTimer = 0;
+    this.inputActive = false;
     this.input.detach();
+    document.removeEventListener("visibilitychange", this.onVisibility);
+  }
+
+  /** A hidden tab stops rendering (and therefore input); tell the server we let go of everything. */
+  private readonly onVisibility = () => {
+    if (document.hidden && this.inputActive) {
+      this.seq = (this.seq + 1) & 0xffff;
+      this.net.sendInput(this.seq, 0);
+    }
+  };
+
+  /**
+   * Fixed-step input + prediction driven by the render loop: exactly one input per server
+   * tick, and the leftover accumulator gives the blend factor for this frame.
+   */
+  private stepInput(frameMs: number): number {
+    if (!this.inputActive) return 1;
+    const tickMs = 1000 / this.config.net.tickRate;
+    this.inputAccumulator += frameMs;
+    let steps = 0;
+    while (this.inputAccumulator >= tickMs && steps < 4) {
+      this.inputAccumulator -= tickMs;
+      steps++;
+      const buttons = this.input.sample();
+      this.seq = (this.seq + 1) & 0xffff;
+      this.net.sendInput(this.seq, buttons);
+      this.predictor?.applyInput(this.seq, buttons, this.phase === Phase.Racing);
+      if (this.predictor?.ready) {
+        this.predPrev = this.predCurr ?? poseOf(this.predictor.state);
+        this.predCurr = poseOf(this.predictor.state);
+      }
+    }
+    if (this.inputAccumulator > tickMs * 4) this.inputAccumulator = 0;
+    return this.inputAccumulator / tickMs;
   }
 
   // ------------------------------------------------------------ render loop
@@ -282,6 +340,7 @@ export class RaceClient extends Emitter<ClientEvents> {
     const frameMs = Math.min(100, now - this.lastFrame);
     const dt = frameMs / 1000;
     this.lastFrame = now;
+    const predictAlpha = this.stepInput(frameMs);
     this.interp.advance(now, frameMs);
     const decay = Math.exp(-dt * 12);
     this.visualOffset.x *= decay;
@@ -301,15 +360,19 @@ export class RaceClient extends Emitter<ClientEvents> {
       let vy = c.vy;
       if (c.slot === this.mySlot && this.predictor?.ready) {
         const p = this.predictor.state;
-        x = p.x + this.visualOffset.x;
-        y = p.y + this.visualOffset.y;
-        z = p.z;
-        heading = p.heading;
+        // Blend between the last two 30 Hz prediction steps so the car moves smoothly at any frame rate.
+        const a = this.predPrev ?? poseOf(p);
+        const b = this.predCurr ?? poseOf(p);
+        const alpha = predictAlpha;
+        x = a.x + (b.x - a.x) * alpha + this.visualOffset.x;
+        y = a.y + (b.y - a.y) * alpha + this.visualOffset.y;
+        z = a.z + (b.z - a.z) * alpha;
+        heading = lerpAngle(a.heading, b.heading, alpha);
         vx = p.vx;
         vy = p.vy;
         // C (or R3) flips the chase camera to look behind; snap on toggle so it doesn't swing through the car.
         const lookBack = this.input.lookingBack();
-        this.world.follow(x, y, heading + (lookBack ? Math.PI : 0), Math.hypot(vx, vy), dt, !this.cameraSnapped || lookBack !== this.lookingBack);
+        this.world.follow(x, y, this.groundHeight(c.slot, x, y) + z, heading + (lookBack ? Math.PI : 0), Math.hypot(vx, vy), dt, !this.cameraSnapped || lookBack !== this.lookingBack);
         this.lookingBack = lookBack;
         this.cameraSnapped = true;
       }
@@ -320,12 +383,12 @@ export class RaceClient extends Emitter<ClientEvents> {
       if (dh < -Math.PI) dh += Math.PI * 2;
       this.headings.set(c.slot, heading);
       const yawRate = dt > 0 ? dh / dt : 0;
-      view.update(x, y, z, heading, forwardSpeed, yawRate, c.flags, dt, now);
+      view.update(x, y, this.groundHeight(c.slot, x, y) + z, heading, forwardSpeed, yawRate, c.flags, dt, now);
       mapDots.push({ x, y, color: this.seats.get(c.slot)?.color ?? "#ccc", me: c.slot === this.mySlot });
       this.placeTag(c.slot, x, y);
     }
     if (remote.length > 0) this.cars.retain(visible);
-    if (!this.cameraSnapped) this.world.orbit(this.track, now / 1000);
+    if (!this.cameraSnapped) this.world.orbit(now / 1000);
     this.fx.sync(this.interp.projectiles(), now);
     this.fx.update(dt);
     if (this.hud && now - this.lastMapDraw > 100) {
@@ -333,6 +396,13 @@ export class RaceClient extends Emitter<ClientEvents> {
       this.lastMapDraw = now;
     }
     this.world.scene.render();
+  }
+
+  /** Ground height under a car (hills, ramps' base); cached segment hint keeps it cheap. */
+  private groundHeight(slot: number, x: number, y: number): number {
+    const g = this.world.groundAt(x, y, this.groundHints.get(slot) ?? -1);
+    this.groundHints.set(slot, g.segment);
+    return g.h;
   }
 
   private placeTag(slot: number, x: number, y: number): void {
@@ -346,7 +416,7 @@ export class RaceClient extends Emitter<ClientEvents> {
       this.hud.tags.append(tag);
       this.tags.set(slot, tag);
     }
-    const p = this.world.project(toWorld(x, y, 3));
+    const p = this.world.project(toWorld(x, y, this.groundHeight(slot, x, y) + 2.4));
     const dist = Math.hypot(this.world.camera.position.x - x, this.world.camera.position.z - y);
     if (!p || dist > 120) {
       tag.style.display = "none";
@@ -364,6 +434,8 @@ export class RaceClient extends Emitter<ClientEvents> {
     this.seq = 0;
     this.cameraSnapped = false;
     this.visualOffset = { x: 0, y: 0 };
+    this.predPrev = null;
+    this.predCurr = null;
     this.predictor?.dispose();
     this.predictor = null;
     this.interp = new SnapshotInterpolator(this.config.net.tickRate, this.config.net.interpolationDelayMs);

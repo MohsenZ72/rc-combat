@@ -3,15 +3,18 @@
  * counts and tick cost. Used to tune balance and to catch anti-cheat false
  * positives: a race between honest bots must produce zero movement anomalies.
  *
- *   npx tsx --conditions=source scripts/headless-race.ts [seed]
+ *   npx tsx --conditions=source scripts/headless-race.ts [seed] [trackId]
  */
 import { DEFAULT_CONFIG, ITEM_NAMES } from "@rc/shared";
-import { BotDriver, loadRapier, RaceSimulation, ReplayRecorder, Track, verifyReplay, WORKSHOP_CIRCUIT } from "../src/index.js";
+import { BotDriver, configForTrack, loadRapier, RaceSimulation, ReplayRecorder, Track, TRACKS, verifyReplay, WORKSHOP_CIRCUIT } from "../src/index.js";
 
 const seed = Number(process.argv[2] ?? 1234);
 const R = await loadRapier();
-const track = new Track(WORKSHOP_CIRCUIT);
-const config = DEFAULT_CONFIG;
+const trackDef = TRACKS[process.argv[3] ?? WORKSHOP_CIRCUIT.id];
+if (!trackDef) throw new Error(`unknown track; known: ${Object.keys(TRACKS).join(", ")}`);
+const track = new Track(trackDef);
+console.log(`track ${trackDef.name}`);
+const config = configForTrack(DEFAULT_CONFIG, trackDef);
 const sim = new RaceSimulation({ rapier: R, track, config, seed, slots: 10 });
 const bots = Array.from({ length: 10 }, (_, i) => new BotDriver(i, seed, 0.45 + (i % 5) * 0.12));
 const recorder = new ReplayRecorder({ matchId: "headless", trackId: track.def.id, seed, config, slots: 10, players: [], startedAt: new Date().toISOString() });
@@ -43,4 +46,4 @@ console.log("anomalies", anomalies.length, anomalies.slice(0, 15));
 const replay = recorder.finish(sim);
 const json = JSON.stringify(replay);
 console.log("replay bytes", json.length);
-console.log("verify", verifyReplay(R, JSON.parse(json), WORKSHOP_CIRCUIT));
+console.log("verify", verifyReplay(R, JSON.parse(json), trackDef));

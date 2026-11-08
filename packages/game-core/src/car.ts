@@ -48,6 +48,10 @@ export interface CarState {
   rank: number;
   progress: number;
   segmentHint: number;
+  /** Arc length along the track at the end of the last tick (ramps, surface). */
+  trackS: number;
+  /** Slope along the heading used this tick (downhill gives a legal speed gain). */
+  surfaceSlope: number;
   wrongWayTicks: number;
   wrongWay: boolean;
   // session
@@ -96,6 +100,8 @@ export function createCar(slot: number, x: number, y: number, heading: number, m
     rank: slot + 1,
     progress: 0,
     segmentHint: -1,
+    trackS: 0,
+    surfaceSlope: 0,
     wrongWayTicks: 0,
     wrongWay: false,
     forfeited: false,

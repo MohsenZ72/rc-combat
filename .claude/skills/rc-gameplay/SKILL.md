@@ -17,6 +17,11 @@ Read `docs/game-design.md`.
 7. Tests: ownership, single use, cooldown, invalid target, effect.
 8. Headless race ×3 seeds: anomalies 0, sensible hit/wreck counts. Update `docs/game-design.md`.
 
+## Handbrake, jump, terrain
+* Handbrake (`BTN.HANDBRAKE`, Space): `handbrakeDeceleration`, `handbrakeGrip`; drift holds with throttle + steer (`integrateMovement`).
+* Jump (`BTN.JUMP`, Q): `jumpVelocity`, `gravity`, `jumpCooldown`; apex = v²/2g must stay below the 2.8 m barrier visuals and above `bodyHeight` (1.0 m) so cars can clear each other.
+* Terrain comes in as `Surface { slope, water }` from `Track.surfaceUnder`; ramps launch in `RaceSimulation.updateRace` and in `CarPredictor`.
+
 ## Change car handling
 * Edit `DEFAULT_CONFIG.car`; the integrator is `integrateMovement` (shared with client prediction).
 * The validator derives limits from the same config (`movementLimits`, `absoluteSpeedCeiling`, `maxJumpHeight`). If you add a new speed or height source, extend those helpers and the validator.

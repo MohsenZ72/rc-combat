@@ -39,10 +39,12 @@ export class CarPredictor {
   private ackedButtons = 0;
   private prevButtons = 0;
   private obstacles: Obstacle[] = [];
+  private segmentHint = -1;
+  private trackS = 0;
   /** Size of the last correction in metres (for debugging/visual smoothing). */
   lastCorrection = 0;
 
-  constructor(rapier: Rapier, track: Track, private readonly config: GameConfig, private readonly slot = 0) {
+  constructor(rapier: Rapier, private readonly track: Track, private readonly config: GameConfig, private readonly slot = 0) {
     this.physics = new PhysicsWorld(rapier, track, config.car.radius);
     this.dt = 1 / config.net.tickRate;
     const pose = track.gridPose(0);
@@ -91,6 +93,9 @@ export class CarPredictor {
     s.finished = (server.flags & CAR_FLAG.FINISHED) !== 0;
     s.drifting = (server.flags & CAR_FLAG.DRIFTING) !== 0;
     s.speedCap = Math.max(this.config.car.maxSpeed, Math.hypot(server.vx, server.vy));
+    const proj = this.track.project(s.x, s.y, this.segmentHint);
+    this.segmentHint = proj.segment;
+    this.trackS = proj.s;
     while (this.pending.length > 0 && !isNewer(this.pending[0]!.seq, ack)) {
       this.ackedButtons = this.pending.shift()!.buttons;
     }
@@ -110,13 +115,21 @@ export class CarPredictor {
     if (s.turboTicks > 0) s.turboTicks--;
     if (s.stunTicks > 0) s.stunTicks--;
     if (s.empTicks > 0) s.empTicks--;
-    integrateMovement(s, buttons, this.dt, this.config, prevButtons);
+    const surface = this.track.surfaceUnder(s.x, s.y, s.heading, this.segmentHint);
+    integrateMovement(s, buttons, this.dt, this.config, prevButtons, surface);
     if (s.wreckTicks > 0) return;
     const res = this.physics.moveCar(this.slot, s.x, s.y, s.vx * this.dt, s.vy * this.dt);
     s.x = res.x;
     s.y = res.y;
     if (res.hitWall) applyWallResponse(s, res.nx, res.ny, this.config);
     this.bumpObstacles();
+    // Mirror the server's ramp launch so take-offs feel instant.
+    const proj = this.track.project(s.x, s.y, this.segmentHint);
+    if (s.z === 0 && s.vz === 0 && this.track.rampCrossed(this.trackS, proj.s)) {
+      if (s.vx * proj.tangentX + s.vy * proj.tangentY >= this.config.car.rampMinSpeed) s.vz = Math.min(this.config.car.rampVelocity, this.config.car.jumpVelocity);
+    }
+    this.segmentHint = proj.segment;
+    this.trackS = proj.s;
   }
 
   /** Same impulse rule as the server's car-car collision, with the other car held still. */

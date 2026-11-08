@@ -310,6 +310,7 @@ export class MatchSession {
       matchId: this.matchId,
       slot,
       trackId: this.deps.track.def.id,
+      trackName: this.deps.track.def.name,
       configHash: configHash(this.config),
       tickRate: this.config.net.tickRate,
       snapshotDivisor: this.config.net.snapshotDivisor,

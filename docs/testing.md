@@ -4,12 +4,13 @@
 
 | Suite | Command | Count | Needs |
 |---|---|---|---|
-| Game core: simulation, physics, race, items, jump, anti-cheat, replay, prediction, protocol | `npm test -w @rc/game-core` | 46 | — |
+| Game core: simulation, physics, race, items, jump, handbrake, terrain, all 4 tracks, anti-cheat, replay, prediction, protocol | `npm test -w @rc/game-core` | 66 | — |
 | Game server (`MatchSession`): lifecycle, kicks, reconnection, AFK, abandonment, verdicts, replay | `npm test -w @rc/game-server` | 11 | — |
 | API e2e (real Postgres) + payout planner | `npm test -w @rc/api` | 16 | `npm run db:up` |
-| Everything | `npm test` | 73 | Postgres |
+| Everything | `npm test` | 93 | Postgres |
 | Type checks | `npm run typecheck` | — | `npm run build:packages` once |
-| Headless 10-bot race (balance + false-positive check) | `npx tsx --conditions=source packages/game-core/scripts/headless-race.ts [seed]` | — | — |
+| Headless 10-bot race (balance + false-positive check) | `npx tsx --conditions=source packages/game-core/scripts/headless-race.ts [seed] [trackId]` | — | — |
+| Track geometry check | `npx tsx --conditions=source packages/game-core/scripts/track-check.ts [trackId]` | — | — |
 | Load test | `npm run loadtest -- --clients N --seconds S` | — | API + game server running |
 
 ## Required anti-cheat cases → tests
@@ -28,6 +29,7 @@
 | fake health → rejected | same, plus `health and damage are server-owned: a shield blocks a rocket` |
 | forged result to the API | API `rejects a result whose roster differs…`, `…from another server or with different match parameters`, `rejects duplicate ranks and corrupt replays` |
 | jump abuse | `jump.test.ts` (no bunny-hop, no double jump, validator rejects flying / mid-air lift) |
+| every map is fair and false-positive free | `tracks.test.ts` (geometry, grid, 90 s 10-bot race with zero anomalies per map), ramps and water |
 
 ## Load test results
 

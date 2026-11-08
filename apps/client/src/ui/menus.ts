@@ -1,7 +1,23 @@
 import { nicknameSchema } from "@rc/shared";
+import { TRACKS } from "@rc/game-core";
 import type { LobbyState, ResultsMessage, SeatInfo } from "../net/connection.js";
 import { clear, formatTime, h, ordinal } from "./dom.js";
 import type { Screen } from "./screens.js";
+
+function mapNote(theme: string): string {
+  switch (theme) {
+    case "toy-track":
+      return "orange toy track, flat & fast";
+    case "rug":
+      return "living-room rug, hills & book ramps";
+    case "kitchen":
+      return "kitchen tiles, water spills";
+    case "toy-canyon":
+      return "toy track canyon, big climbs & splash";
+    default:
+      return "";
+  }
+}
 
 const controlsHelp = () =>
   h(
@@ -23,7 +39,10 @@ export class TitleScreen implements Screen {
   private readonly button: HTMLButtonElement;
   private readonly error: HTMLParagraphElement;
 
-  constructor(nickname: string | null, private readonly onPlay: (nickname: string) => Promise<void>) {
+  private track: string;
+
+  constructor(nickname: string | null, private readonly onPlay: (nickname: string, track: string) => Promise<void>, track = "any") {
+    this.track = track;
     this.input = h("input", {
       class: "input",
       id: "nick",
@@ -41,6 +60,7 @@ export class TitleScreen implements Screen {
       "form",
       { class: "stack", onsubmit: (e: Event) => void this.submit(e) },
       h("div", { class: "field" }, h("label", { for: "nick" }, "Racer name"), this.input),
+      this.mapPicker(),
       this.button,
       this.error,
     );
@@ -51,7 +71,7 @@ export class TitleScreen implements Screen {
         "div",
         { class: "panel stack" },
         h("h1", { class: "rc-hero" }, "Garage", h("br"), h("span", {}, "Rumble")),
-        h("p", { class: "rc-muted" }, "10 RC cars. 5 laps. Race first, fight second. Same car for everyone."),
+        h("p", { class: "rc-muted" }, "10 diecast cars racing round the house. Race first, fight second. Same car stats for everyone."),
         form,
         controlsHelp(),
       ),
@@ -60,6 +80,33 @@ export class TitleScreen implements Screen {
 
   focusTarget() {
     return this.input.value ? this.button : this.input;
+  }
+
+  /** Map choice. Players are matched with others who picked the same map ("Any" is its own pool). */
+  private mapPicker(): HTMLElement {
+    const options = [{ id: "any", name: "Any map", note: "fastest match" }, ...Object.values(TRACKS).map((t) => ({ id: t.id, name: t.name, note: mapNote(t.theme) }))];
+    return h(
+      "fieldset",
+      { class: "maps" },
+      h("legend", {}, "Map"),
+      ...options.map((o) =>
+        h(
+          "label",
+          { class: "map-option" },
+          h("input", {
+            type: "radio",
+            name: "map",
+            value: o.id,
+            checked: o.id === this.track,
+            onchange: () => {
+              this.track = o.id;
+            },
+          }),
+          h("span", { class: "map-name" }, o.name),
+          h("span", { class: "map-note" }, o.note),
+        ),
+      ),
+    );
   }
 
   private async submit(e: Event): Promise<void> {
@@ -74,7 +121,7 @@ export class TitleScreen implements Screen {
     this.button.textContent = "Connecting…";
     this.error.textContent = "";
     try {
-      await this.onPlay(parsed.data);
+      await this.onPlay(parsed.data, this.track);
     } catch (err) {
       this.error.textContent = (err as Error).message || "Could not connect. Is the server running?";
       this.button.disabled = false;

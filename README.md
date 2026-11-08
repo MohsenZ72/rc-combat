@@ -1,6 +1,6 @@
 # Garage Rumble
 
-A browser-based, 10-player **RC combat racing** game with **server-authoritative** gameplay and layered anti-cheat. You race toy RC cars around a track taped on a giant workshop floor, jump over rockets, drop mines, and finish first. Rank comes from track progress, not kills.
+A browser-based, 10-player **toy-car combat racing** game with **server-authoritative** gameplay and layered anti-cheat. You race diecast toy cars round the house: an orange toy track, the living-room rug, the kitchen tiles and a toy-track canyon. You handbrake into drifts, jump clean over rivals and rockets, drop mines, and finish first. Rank comes from track progress, not kills.
 
 * **Client:** TypeScript, Babylon.js (WebGL2), Vite, plain-DOM UI with design tokens
 * **Game server:** Colyseus 0.18 over WebSocket, fixed 30 Hz simulation, Rapier 2D (WASM) physics
@@ -20,12 +20,14 @@ npm run dev              # API :3000 · game server :2567 · client http://local
 
 Open <http://localhost:5173>, pick a name, press **Find a race**. With dev settings, empty seats fill with bots after 15 s.
 
-**Controls:** W/S throttle and brake · A/D steer · Shift drift · **Space jump** · F fire · E use item. A gamepad works too.
+**Controls:** W/S throttle and brake · A/D steer · **Space handbrake (drift)** · **Q jump** · F fire · E use item · **C look back**. A gamepad works too.
+
+**Maps:** Toy Track Classic (flat, fast), Living Room Rug (hills, book ramps), Kitchen Tiles (water spills, tray, ramps), Toy Track Canyon (12 m climbs, splash). Pick one or "Any map".
 
 ## Tests
 
 ```bash
-npm test                                   # 73 tests (game-core 46, game-server 11, API e2e 16; needs db:up)
+npm test                                   # 93 tests (game-core 66, game-server 11, API e2e 16; needs db:up)
 npm run typecheck
 npm run loadtest -- --clients 200 --seconds 60
 ```
@@ -54,4 +56,4 @@ Start at [docs/README.md](docs/README.md). Persian overview: [README.fa.md](READ
 
 ## Status
 
-MVP (phase 1) is done: playable multiplayer loop, one track, jump, six items plus a zapper, anti-cheat, results, replays, load-tested. Web3 prize tournaments are designed but **not** implemented, and real-money play needs legal review first; see [docs/system-design/06-web3.md](docs/system-design/06-web3.md).
+MVP (phase 1) is done: playable multiplayer loop, four house-themed maps with elevation, water and ramps, diecast cars, handbrake drift, jump, six items plus a zapper, anti-cheat, results, replays, load-tested. Web3 prize tournaments are designed but **not** implemented, and real-money play needs legal review first; see [docs/system-design/06-web3.md](docs/system-design/06-web3.md).

@@ -1,6 +1,6 @@
 import { defineRoom, defineServer, matchMaker, WebSocketTransport } from "colyseus";
 import { DEFAULT_CONFIG, mergeConfig } from "@rc/shared";
-import { loadRapier, Track, TRACKS, WORKSHOP_CIRCUIT } from "@rc/game-core";
+import { loadRapier, Track, TRACKS } from "@rc/game-core";
 import { HttpBackend } from "./api-client.js";
 import { TokenVerifier } from "./auth.js";
 import { loadEnv } from "./env.js";
@@ -22,10 +22,10 @@ const config = mergeConfig(DEFAULT_CONFIG, {
   net: { tickRate: env.TICK_RATE, snapshotDivisor: env.SNAPSHOT_DIVISOR },
 });
 const rapier = await loadRapier();
-const track = new Track(TRACKS[WORKSHOP_CIRCUIT.id]!);
+const tracks = new Map(Object.values(TRACKS).map((def) => [def.id, new Track(def)]));
 const backend = new HttpBackend(env.API_INTERNAL_URL, env.INTERNAL_API_KEY, logger);
 const verifier = new TokenVerifier(env.JWT_SECRET, env.JWT_ISSUER, env.JWT_AUDIENCE, backend);
-RaceRoom.deps = { env, config, rapier, track, verifier, backend, log: logger };
+RaceRoom.deps = { env, config, rapier, tracks, verifier, backend, log: logger };
 
 // Only our own web client may call the matchmaking HTTP routes from a browser.
 const allowedOrigins = new Set(env.CLIENT_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean));
@@ -36,7 +36,8 @@ matchMaker.controller.getCorsHeaders = (headers: Headers) => {
 };
 
 const server = defineServer({
-  rooms: { race: defineRoom(RaceRoom) },
+  // Players are matched per chosen track ("any" is its own pool that gets a random map).
+  rooms: { race: defineRoom(RaceRoom).filterBy(["track"]) },
   transport: new WebSocketTransport({
     maxPayload: config.net.maxMessageBytes,
     pingInterval: 5000,

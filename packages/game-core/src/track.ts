@@ -1,10 +1,26 @@
+import { mergeConfig, type GameConfig } from "@rc/shared";
 import { clamp, type Vec2 } from "./math.js";
+
+/** Match config for a track: applies its lap count over the defaults. */
+export function configForTrack(config: GameConfig, def: TrackDefinition): GameConfig {
+  return def.laps ? mergeConfig(config, { race: { laps: def.laps } }) : config;
+}
+
+/** Visual setting; the client picks floor, surface, barriers and props from it. */
+export type TrackTheme = "toy-track" | "rug" | "kitchen" | "toy-canyon";
 
 export interface TrackDefinition {
   id: string;
   name: string;
-  /** Closed loop of control points in metres, driven in the listed order. */
-  controlPoints: ReadonlyArray<readonly [number, number]>;
+  theme: TrackTheme;
+  /** Closed loop of control points in metres [x, y, height?], driven in the listed order. */
+  controlPoints: ReadonlyArray<readonly [number, number] | readonly [number, number, number]>;
+  /** Shallow water stretches as lap fractions (slower, slippery). */
+  water?: ReadonlyArray<{ from: number; to: number }>;
+  /** Ramp lips as lap fractions: crossing one fast enough launches the car. */
+  ramps?: ReadonlyArray<{ at: number }>;
+  /** Laps for this track (longer/hillier tracks run fewer to keep ~4 min races). */
+  laps?: number;
   width: number;
   checkpointCount: number;
   /** Rows of item boxes, `at` is the fraction of a lap (0..1). */
@@ -57,6 +73,12 @@ export class Track {
   readonly gates: Gate[];
   readonly boxes: Vec2[];
   readonly count: number;
+  /** Ground height per centreline sample (metres). */
+  readonly zs: Float64Array;
+  /** dz/ds per sample. */
+  readonly slopes: Float64Array;
+  readonly rampS: number[];
+  readonly waterRanges: { from: number; to: number }[];
 
   constructor(def: TrackDefinition) {
     this.def = def;
@@ -67,12 +89,15 @@ export class Track {
     const n = this.count;
     this.xs = new Float64Array(n);
     this.ys = new Float64Array(n);
+    this.zs = new Float64Array(n);
+    this.slopes = new Float64Array(n);
     this.tx = new Float64Array(n);
     this.ty = new Float64Array(n);
     this.cumulative = new Float64Array(n + 1);
     for (let i = 0; i < n; i++) {
       this.xs[i] = resampled[i]!.x;
       this.ys[i] = resampled[i]!.y;
+      this.zs[i] = Math.max(0, resampled[i]!.z);
     }
     let acc = 0;
     for (let i = 0; i < n; i++) {
@@ -90,7 +115,10 @@ export class Track {
       const len = Math.hypot(dx, dy) || 1;
       this.tx[i] = dx / len;
       this.ty[i] = dy / len;
+      this.slopes[i] = (this.zs[q]! - this.zs[p]!) / len;
     }
+    this.rampS = (def.ramps ?? []).map((r) => r.at * this.length);
+    this.waterRanges = (def.water ?? []).map((w) => ({ from: w.from * this.length, to: w.to * this.length }));
 
     this.gates = [];
     for (let k = 0; k < def.checkpointCount; k++) {
@@ -122,6 +150,72 @@ export class Track {
         this.boxes.push({ x: pose.x + lx * offset, y: pose.y + ly * offset });
       }
     }
+  }
+
+  private sampleIndex(s: number): { i: number; j: number; f: number } {
+    const L = this.length;
+    let t = s % L;
+    if (t < 0) t += L;
+    let lo = 0;
+    let hi = this.count - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (this.cumulative[mid]! <= t) lo = mid;
+      else hi = mid - 1;
+    }
+    const segLen = this.cumulative[lo + 1]! - this.cumulative[lo]!;
+    return { i: lo, j: (lo + 1) % this.count, f: segLen > 0 ? (t - this.cumulative[lo]!) / segLen : 0 };
+  }
+
+  /** Ground height under arc length `s`. The track is flat across its width. */
+  heightAt(s: number): number {
+    const { i, j, f } = this.sampleIndex(s);
+    return this.zs[i]! + (this.zs[j]! - this.zs[i]!) * f;
+  }
+
+  /** dz/ds along the direction of travel at `s`. */
+  slopeAt(s: number): number {
+    const { i, j, f } = this.sampleIndex(s);
+    return this.slopes[i]! + (this.slopes[j]! - this.slopes[i]!) * f;
+  }
+
+  waterAt(s: number): boolean {
+    for (const w of this.waterRanges) if (s >= w.from && s <= w.to) return true;
+    return false;
+  }
+
+  /** True if moving from prevS to s (forwards, not across the lap seam backwards) passes a ramp lip. */
+  rampCrossed(prevS: number, s: number): boolean {
+    if (this.rampS.length === 0) return false;
+    let d = s - prevS;
+    if (d < -this.length / 2) d += this.length;
+    if (d <= 0 || d > 10) return false;
+    for (const r of this.rampS) {
+      let a = r - prevS;
+      if (a < 0) a += this.length;
+      if (a > 0 && a <= d) return true;
+    }
+    return false;
+  }
+
+  /** Ground under a car: slope along its heading and whether it is in water. */
+  surfaceUnder(x: number, y: number, heading: number, hint: number): { slope: number; water: boolean; s: number; segment: number } {
+    const p = this.project(x, y, hint);
+    const along = Math.cos(heading) * p.tangentX + Math.sin(heading) * p.tangentY;
+    return { slope: this.slopeAt(p.s) * along, water: this.waterAt(p.s), s: p.s, segment: p.segment };
+  }
+
+  /** Highest and lowest ground and steepest grade (for validation and tooling). */
+  elevationStats(): { min: number; max: number; maxSlope: number } {
+    let min = Infinity;
+    let max = -Infinity;
+    let maxSlope = 0;
+    for (let i = 0; i < this.count; i++) {
+      min = Math.min(min, this.zs[i]!);
+      max = Math.max(max, this.zs[i]!);
+      maxSlope = Math.max(maxSlope, Math.abs(this.slopes[i]!));
+    }
+    return { min, max, maxSlope };
   }
 
   /** Position and travel heading on the centreline at arc length `s` (wraps). */
@@ -205,6 +299,15 @@ export class Track {
     return out;
   }
 
+  /** Boundary with ground height per sample (for rendering). Closed: first point repeated last. */
+  boundary3(side: 1 | -1, inset = 0): { x: number; y: number; z: number; s: number }[] {
+    const flat = this.boundary(side, inset);
+    return flat.map((p, i) => {
+      const k = i % this.count;
+      return { x: p.x, y: p.y, z: this.zs[k]!, s: i === this.count ? this.length : this.cumulative[k]! };
+    });
+  }
+
   /** Starting grid: two columns behind the start/finish line. */
   gridPose(slot: number): Pose {
     const row = Math.floor(slot / 2);
@@ -238,11 +341,17 @@ export class Track {
   }
 }
 
-/** Centripetal Catmull-Rom through a closed loop of points. */
-function sampleClosedCatmullRom(points: ReadonlyArray<readonly [number, number]>, perSegment: number): Vec2[] {
+type Vec3 = Vec2 & { z: number };
+type ControlPoint = readonly [number, number] | readonly [number, number, number];
+
+/** Centripetal Catmull-Rom through a closed loop of points (height interpolated on the same parameter). */
+function sampleClosedCatmullRom(points: ReadonlyArray<ControlPoint>, perSegment: number): Vec3[] {
   const n = points.length;
-  const out: Vec2[] = [];
-  const P = (i: number) => points[((i % n) + n) % n]!;
+  const out: Vec3[] = [];
+  const P = (i: number): readonly [number, number, number] => {
+    const p = points[((i % n) + n) % n]!;
+    return [p[0], p[1], p[2] ?? 0];
+  };
   for (let i = 0; i < n; i++) {
     const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
     const t0 = 0;
@@ -262,17 +371,17 @@ function sampleClosedCatmullRom(points: ReadonlyArray<readonly [number, number]>
   return out;
 }
 
-function mix(a: readonly [number, number], b: readonly [number, number], ta: number, tb: number, t: number): Vec2 {
+function mix(a: readonly [number, number, number], b: readonly [number, number, number], ta: number, tb: number, t: number): Vec3 {
   const w = tb - ta === 0 ? 0 : (t - ta) / (tb - ta);
-  return { x: a[0] + (b[0] - a[0]) * w, y: a[1] + (b[1] - a[1]) * w };
+  return { x: a[0] + (b[0] - a[0]) * w, y: a[1] + (b[1] - a[1]) * w, z: a[2] + (b[2] - a[2]) * w };
 }
 
-function mixV(a: Vec2, b: Vec2, ta: number, tb: number, t: number): Vec2 {
+function mixV(a: Vec3, b: Vec3, ta: number, tb: number, t: number): Vec3 {
   const w = tb - ta === 0 ? 0 : (t - ta) / (tb - ta);
-  return { x: a.x + (b.x - a.x) * w, y: a.y + (b.y - a.y) * w };
+  return { x: a.x + (b.x - a.x) * w, y: a.y + (b.y - a.y) * w, z: a.z + (b.z - a.z) * w };
 }
 
-function resampleByArcLength(points: Vec2[], spacing: number): Vec2[] {
+function resampleByArcLength(points: Vec3[], spacing: number): Vec3[] {
   const n = points.length;
   let total = 0;
   const seg: number[] = [];
@@ -285,7 +394,7 @@ function resampleByArcLength(points: Vec2[], spacing: number): Vec2[] {
   }
   const count = Math.max(8, Math.round(total / spacing));
   const step = total / count;
-  const out: Vec2[] = [];
+  const out: Vec3[] = [];
   let i = 0;
   let consumed = 0;
   for (let k = 0; k < count; k++) {
@@ -297,7 +406,7 @@ function resampleByArcLength(points: Vec2[], spacing: number): Vec2[] {
     const a = points[i]!;
     const b = points[(i + 1) % n]!;
     const f = seg[i]! > 0 ? (target - consumed) / seg[i]! : 0;
-    out.push({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f });
+    out.push({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f });
   }
   return out;
 }

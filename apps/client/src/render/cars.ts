@@ -1,32 +1,161 @@
-import { Color3, MeshBuilder, TransformNode, Vector3, type Mesh, type Scene, type StandardMaterial } from "@babylonjs/core";
+import { Color3, DynamicTexture, Mesh, MeshBuilder, TransformNode, Vector3, type Scene, type StandardMaterial } from "@babylonjs/core";
 import { CAR_FLAG } from "@rc/shared";
 import { mat, toWorld, type World } from "./world.js";
 
-const WHEEL_RADIUS = 0.45;
-const TYRE_THICKNESS = 0.24;
+const WHEEL_RADIUS = 0.34;
+const TYRE_THICKNESS = 0.16;
 const MAX_STEER_VISUAL = 0.45;
 
+/** One station of a lofted body: x along the car (+x = nose), half width, bottom and roof line. */
+interface Station {
+  x: number;
+  hw: number;
+  bottom: number;
+  top: number;
+}
+
+type BodyStyle = "supercar" | "muscle" | "rally";
+
+/** Side profiles of the three diecast body styles (length 2.6, width ≈ 1.45). */
+const BODIES: Record<BodyStyle, { body: Station[]; cabin: Station[] }> = {
+  supercar: {
+    body: [
+      { x: -1.32, hw: 0.05, bottom: 0.3, top: 0.4 },
+      { x: -1.3, hw: 0.62, bottom: 0.22, top: 0.62 },
+      { x: -1.0, hw: 0.72, bottom: 0.2, top: 0.66 },
+      { x: -0.3, hw: 0.73, bottom: 0.2, top: 0.6 },
+      { x: 0.4, hw: 0.72, bottom: 0.2, top: 0.52 },
+      { x: 1.0, hw: 0.66, bottom: 0.2, top: 0.42 },
+      { x: 1.3, hw: 0.56, bottom: 0.22, top: 0.33 },
+      { x: 1.33, hw: 0.05, bottom: 0.26, top: 0.3 },
+    ],
+    cabin: [
+      { x: -0.75, hw: 0.05, bottom: 0.6, top: 0.62 },
+      { x: -0.7, hw: 0.5, bottom: 0.58, top: 0.8 },
+      { x: -0.2, hw: 0.56, bottom: 0.56, top: 0.92 },
+      { x: 0.25, hw: 0.54, bottom: 0.52, top: 0.86 },
+      { x: 0.62, hw: 0.46, bottom: 0.48, top: 0.56 },
+      { x: 0.66, hw: 0.05, bottom: 0.48, top: 0.5 },
+    ],
+  },
+  muscle: {
+    body: [
+      { x: -1.32, hw: 0.05, bottom: 0.3, top: 0.45 },
+      { x: -1.3, hw: 0.66, bottom: 0.22, top: 0.7 },
+      { x: -0.8, hw: 0.74, bottom: 0.2, top: 0.72 },
+      { x: 0.2, hw: 0.74, bottom: 0.2, top: 0.66 },
+      { x: 1.0, hw: 0.72, bottom: 0.2, top: 0.62 },
+      { x: 1.3, hw: 0.66, bottom: 0.22, top: 0.55 },
+      { x: 1.33, hw: 0.05, bottom: 0.3, top: 0.45 },
+    ],
+    cabin: [
+      { x: -0.65, hw: 0.05, bottom: 0.68, top: 0.7 },
+      { x: -0.6, hw: 0.55, bottom: 0.68, top: 0.95 },
+      { x: -0.05, hw: 0.58, bottom: 0.66, top: 1.0 },
+      { x: 0.4, hw: 0.54, bottom: 0.64, top: 0.72 },
+      { x: 0.44, hw: 0.05, bottom: 0.64, top: 0.66 },
+    ],
+  },
+  rally: {
+    body: [
+      { x: -1.25, hw: 0.05, bottom: 0.3, top: 0.5 },
+      { x: -1.22, hw: 0.66, bottom: 0.22, top: 0.7 },
+      { x: -0.6, hw: 0.73, bottom: 0.2, top: 0.72 },
+      { x: 0.5, hw: 0.73, bottom: 0.2, top: 0.62 },
+      { x: 1.15, hw: 0.66, bottom: 0.22, top: 0.5 },
+      { x: 1.2, hw: 0.05, bottom: 0.3, top: 0.42 },
+    ],
+    cabin: [
+      { x: -1.05, hw: 0.05, bottom: 0.68, top: 0.7 },
+      { x: -1.0, hw: 0.58, bottom: 0.68, top: 1.05 },
+      { x: -0.2, hw: 0.6, bottom: 0.66, top: 1.12 },
+      { x: 0.35, hw: 0.55, bottom: 0.62, top: 0.74 },
+      { x: 0.4, hw: 0.05, bottom: 0.62, top: 0.64 },
+    ],
+  },
+};
+
+/** Rounded cross-section (underside → one side → roof → other side), car-local (y up, z sideways). */
+function section(st: Station): Vector3[] {
+  const { x, hw, bottom, top } = st;
+  const mid = bottom + (top - bottom) * 0.55;
+  const pts: [number, number][] = [
+    [0, bottom],
+    [hw * 0.8, bottom],
+    [hw, bottom + (top - bottom) * 0.2],
+    [hw, mid],
+    [hw * 0.92, top - (top - bottom) * 0.12],
+    [hw * 0.6, top],
+    [0, top + 0.01],
+    [-hw * 0.6, top],
+    [-hw * 0.92, top - (top - bottom) * 0.12],
+    [-hw, mid],
+    [-hw, bottom + (top - bottom) * 0.2],
+    [-hw * 0.8, bottom],
+    [0, bottom],
+  ];
+  return pts.map(([z, y]) => new Vector3(x, y, z));
+}
+
+function loft(name: string, stations: Station[], scene: Scene): Mesh {
+  return MeshBuilder.CreateRibbon(name, { pathArray: stations.map(section), sideOrientation: Mesh.DOUBLESIDE }, scene);
+}
+
+/** Livery: paint, twin racing stripes over the roof line, number roundels on both doors. */
+function liveryTexture(scene: Scene, slot: number, color: string): DynamicTexture {
+  // u runs around the cross-section (0.5 = roof centre), v runs rear → nose.
+  const tex = new DynamicTexture(`livery${slot}`, { width: 512, height: 512 }, scene, true);
+  const c = tex.getContext() as CanvasRenderingContext2D;
+  const s = 512;
+  c.fillStyle = color;
+  c.fillRect(0, 0, s, s);
+  c.fillStyle = "rgba(255,255,255,0.92)";
+  c.fillRect(s * 0.455, 0, s * 0.03, s);
+  c.fillRect(s * 0.515, 0, s * 0.03, s);
+  c.fillStyle = "rgba(0,0,0,0.35)";
+  for (const u of [0.25, 0.75]) {
+    c.save();
+    c.translate(s * u, s * 0.28);
+    c.rotate(-0.5);
+    c.fillRect(-60, -10, 120, 14);
+    c.restore();
+  }
+  const number = String(((slot * 7 + 3) % 98) + 1);
+  for (const u of [0.25, 0.75]) {
+    c.fillStyle = "#ffffff";
+    c.beginPath();
+    c.arc(s * u, s * 0.5, 42, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#111111";
+    c.font = "bold 52px 'Chakra Petch', Arial, sans-serif";
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.save();
+    c.translate(s * u, s * 0.5);
+    c.rotate(u < 0.5 ? Math.PI / 2 : -Math.PI / 2);
+    c.fillText(number, 0, 2);
+    c.restore();
+  }
+  tex.update();
+  return tex;
+}
+
 interface Wheel {
-  /** Steering pivot (front wheels turn left/right around Y). */
   pivot: TransformNode;
-  /** Spinning tyre: rolls around its axle (local Z). */
   tyre: Mesh;
   front: boolean;
 }
 
 /**
- * One RC buggy. Hierarchy:
+ * One diecast toy sports car. Hierarchy:
  *   root (position, yaw)
- *   ├─ body (roll/pitch from cornering, braking and landing)
- *   │   └─ chassis, shell, nose, wing, antenna…
- *   └─ wheel pivots (steer) → tyre (spin around the axle) → rim spokes
- * Wheels stay on the ground while the body leans, like a real RC car.
+ *   ├─ body (roll/pitch) → lofted shell with livery, glass cabin, lights
+ *   └─ wheel pivots (steer) → tyre (spins around local Z) → chrome rim + spokes
  */
 class CarView {
   readonly root: TransformNode;
   private readonly body: TransformNode;
-  private readonly shellMat: StandardMaterial;
-  private readonly baseColor: Color3;
+  private readonly paint: StandardMaterial;
   private readonly wheels: Wheel[] = [];
   private readonly shield: Mesh;
   private readonly flame: Mesh;
@@ -35,115 +164,125 @@ class CarView {
   private roll = 0;
   private pitch = 0;
   private lastSpeed = 0;
+  /** Low-pass filtered acceleration and yaw rate: raw values step at the network rate and would make the body tremble. */
+  private accelF = 0;
+  private yawF = 0;
   private flashUntil = 0;
 
   constructor(world: World, readonly slot: number, color: string) {
     const scene = world.scene;
+    const style: BodyStyle = (["supercar", "muscle", "rally"] as const)[slot % 3]!;
+    const shape = BODIES[style];
     this.root = new TransformNode(`car${slot}`, scene);
     this.body = new TransformNode(`body${slot}`, scene);
     this.body.parent = this.root;
-    this.baseColor = Color3.FromHexString(color);
-    this.shellMat = mat(scene, `shell${slot}`, color, { specular: 0.6 });
-    const dark = mat(scene, `chassis${slot}`, "#15181d", { specular: 0.2 });
-    const tyreMat = mat(scene, `tyre${slot}`, "#0b0c0e", { specular: 0.05 });
-    const rimMat = mat(scene, `rim${slot}`, "#c9d0db", { specular: 0.7 });
-    const rimDarkMat = mat(scene, `rimd${slot}`, "#3a4150", { specular: 0.4 });
 
-    const parts: Mesh[] = [];
-    const add = (m: Mesh, x: number, y: number, z: number, material: StandardMaterial) => {
-      m.position.set(x, y, z);
-      m.material = material;
-      m.parent = this.body;
-      parts.push(m);
-      return m;
-    };
-    add(MeshBuilder.CreateBox("chassis", { width: 2.5, height: 0.3, depth: 1.3 }, scene), 0, 0.5, 0, dark);
-    add(MeshBuilder.CreateBox("shell", { width: 1.6, height: 0.55, depth: 1.2 }, scene), -0.1, 0.9, 0, this.shellMat);
-    add(MeshBuilder.CreateBox("nose", { width: 0.7, height: 0.28, depth: 1.05 }, scene), 1.0, 0.7, 0, this.shellMat);
-    add(MeshBuilder.CreateBox("wing", { width: 0.45, height: 0.08, depth: 1.7 }, scene), -1.2, 1.4, 0, this.shellMat);
-    add(MeshBuilder.CreateBox("strut", { width: 0.1, height: 0.5, depth: 0.1 }, scene), -1.15, 1.15, 0, dark);
-    add(MeshBuilder.CreateCylinder("antenna", { diameter: 0.05, height: 1.6, tessellation: 4 }, scene), -0.6, 1.75, -0.4, dark);
-    add(MeshBuilder.CreateSphere("tip", { diameter: 0.18, segments: 4 }, scene), -0.6, 2.55, -0.4, mat(scene, `tip${slot}`, color, { emissive: 0.8 }));
+    this.paint = mat(scene, `paint${slot}`, "#ffffff", { specular: 1, specularPower: 96 });
+    this.paint.diffuseTexture = liveryTexture(scene, slot, color);
+    const shell = loft("shell", shape.body, scene);
+    shell.material = this.paint;
+    shell.parent = this.body;
 
-    for (const [x, z] of [[0.85, 0.82], [0.85, -0.82], [-0.85, 0.82], [-0.85, -0.82]] as const) {
+    const glass = mat(scene, `glass${slot}`, "#1a2433", { specular: 1, specularPower: 128, alpha: 0.92 });
+    const cabin = loft("cabin", shape.cabin, scene);
+    cabin.material = glass;
+    cabin.parent = this.body;
+
+    const nose = shape.body[shape.body.length - 2]!;
+    const tail = shape.body[1]!;
+    const headMat = mat(scene, `head${slot}`, "#fff6d6", { emissive: 0.9 });
+    const tailMat = mat(scene, `tail${slot}`, "#ff2a2a", { emissive: 0.8 });
+    for (const zSide of [1, -1]) {
+      const head = MeshBuilder.CreateBox("headlight", { width: 0.06, height: 0.08, depth: 0.22 }, scene);
+      head.material = headMat;
+      head.position.set(nose.x + 0.01, (nose.bottom + nose.top) / 2 + 0.02, zSide * nose.hw * 0.6);
+      head.parent = this.body;
+      const tl = MeshBuilder.CreateBox("taillight", { width: 0.06, height: 0.08, depth: 0.26 }, scene);
+      tl.material = tailMat;
+      tl.position.set(tail.x - 0.01, tail.top - 0.12, zSide * tail.hw * 0.62);
+      tl.parent = this.body;
+    }
+    if (style === "supercar") {
+      const wing = MeshBuilder.CreateBox("wing", { width: 0.28, height: 0.05, depth: 1.3 }, scene);
+      wing.material = this.paint;
+      wing.position.set(-1.12, 0.86, 0);
+      wing.parent = this.body;
+    }
+    world.shadows.addShadowCaster(shell);
+    world.shadows.addShadowCaster(cabin);
+
+    const tyreMat = mat(scene, `tyre${slot}`, "#101114", { specular: 0.05 });
+    const chrome = mat(scene, `chrome${slot}`, "#e6eaf0", { specular: 1, specularPower: 128 });
+    for (const [x, z] of [[0.82, 0.66], [0.82, -0.66], [-0.82, 0.66], [-0.82, -0.66]] as const) {
       const pivot = new TransformNode("wheel-pivot", scene);
       pivot.parent = this.root;
       pivot.position.set(x, WHEEL_RADIUS, z);
-      // Rounded rubber tyre: a smooth torus (48 segments) around the axle. Babylon builds
-      // tori/cylinders around Y, so bake a 90° X rotation to put the axle on Z.
+      // Torus around Y → widen along Y (the future axle) BEFORE rotating it onto Z; this keeps the ring circular.
       const tyre = MeshBuilder.CreateTorus("tyre", { diameter: WHEEL_RADIUS * 2 - TYRE_THICKNESS, thickness: TYRE_THICKNESS, tessellation: 48 }, scene);
-      // Scaling applies before rotation: widen along the torus axis (local Y, which becomes the
-      // axle after the 90° turn). Scaling Z here would squash the ring into an ellipse.
-      tyre.scaling.y = 1.7; // wide RC buggy tread
+      tyre.scaling.y = 1.6;
       tyre.rotation.x = Math.PI / 2;
       tyre.bakeCurrentTransformIntoVertices();
       tyre.material = tyreMat;
       tyre.parent = pivot;
       const side = z > 0 ? 1 : -1;
-      // Rim disc fills the tyre, then five spokes and a hub cap on the outer face.
-      const rim = MeshBuilder.CreateCylinder("rim", { diameter: (WHEEL_RADIUS - TYRE_THICKNESS) * 2 + 0.08, height: 0.2, tessellation: 48 }, scene);
+      const rimR = WHEEL_RADIUS - TYRE_THICKNESS + 0.04;
+      const rim = MeshBuilder.CreateCylinder("rim", { diameter: rimR * 2, height: 0.16, tessellation: 48 }, scene);
       rim.rotation.x = Math.PI / 2;
       rim.bakeCurrentTransformIntoVertices();
-      rim.material = rimDarkMat;
+      rim.material = chrome;
       rim.parent = tyre;
       for (let k = 0; k < 5; k++) {
-        const spoke = MeshBuilder.CreateBox("spoke", { width: WHEEL_RADIUS - TYRE_THICKNESS + 0.02, height: 0.07, depth: 0.04 }, scene);
-        spoke.setPivotPoint(new Vector3(-(WHEEL_RADIUS - TYRE_THICKNESS + 0.02) / 2, 0, 0));
-        spoke.position.set((WHEEL_RADIUS - TYRE_THICKNESS + 0.02) / 2, 0, side * 0.11);
+        const spoke = MeshBuilder.CreateBox("spoke", { width: rimR, height: 0.045, depth: 0.03 }, scene);
+        spoke.setPivotPoint(new Vector3(-rimR / 2, 0, 0));
+        spoke.position.set(rimR / 2, 0, side * 0.085);
         spoke.rotation.z = (k * Math.PI * 2) / 5;
-        spoke.material = rimMat;
+        spoke.material = tyreMat;
         spoke.parent = tyre;
       }
-      const hub = MeshBuilder.CreateCylinder("hub", { diameter: 0.14, height: 0.06, tessellation: 32 }, scene);
-      hub.rotation.x = Math.PI / 2;
-      hub.position.z = side * 0.13;
-      hub.material = mat(scene, `hub${slot}`, color, { specular: 0.8 });
-      hub.parent = tyre;
       this.wheels.push({ pivot, tyre, front: x > 0 });
       world.shadows.addShadowCaster(tyre);
     }
-    for (const m of parts) world.shadows.addShadowCaster(m);
 
-    this.shield = MeshBuilder.CreateSphere("shield", { diameter: 3.9, segments: 12 }, scene);
+    this.shield = MeshBuilder.CreateSphere("shield", { diameter: 3.6, segments: 16 }, scene);
     this.shield.material = mat(scene, `shieldm${slot}`, "#2fd3ff", { emissive: 0.6, alpha: 0.28 });
     this.shield.parent = this.root;
-    this.shield.position.y = 0.9;
+    this.shield.position.y = 0.6;
     this.shield.isVisible = false;
-    this.flame = MeshBuilder.CreateCylinder("flame", { diameterTop: 0, diameterBottom: 0.7, height: 1.6, tessellation: 8 }, scene);
+    this.flame = MeshBuilder.CreateCylinder("flame", { diameterTop: 0, diameterBottom: 0.45, height: 1.2, tessellation: 12 }, scene);
     this.flame.material = mat(scene, `flame${slot}`, "#ff9f1c", { emissive: 1, alpha: 0.85 });
     this.flame.parent = this.body;
     this.flame.rotation.z = Math.PI / 2;
-    this.flame.position.set(-2.0, 0.65, 0);
+    this.flame.position.set(tail.x - 0.65, 0.35, 0);
     this.flame.isVisible = false;
   }
 
   /**
    * `forwardSpeed` is signed (negative when reversing) so wheels roll backwards.
-   * `yawRate` drives front-wheel steering and body roll.
+   * `height` is ground height plus jump height.
    */
-  update(x: number, y: number, z: number, heading: number, forwardSpeed: number, yawRate: number, flags: number, dt: number, now: number): void {
-    this.root.position.copyFrom(toWorld(x, y, z));
+  update(x: number, y: number, height: number, heading: number, forwardSpeed: number, yawRate: number, flags: number, dt: number, now: number): void {
+    this.root.position.copyFrom(toWorld(x, y, height));
     // Babylon is left-handed: rotating +x towards +z needs a negative yaw.
     this.root.rotation.y = -heading;
 
-    // Roll the tyres by distance travelled (arc length / radius). Airborne wheels keep spinning freely.
     this.spin -= (forwardSpeed * dt) / WHEEL_RADIUS;
-    const steerTarget = Math.max(-MAX_STEER_VISUAL, Math.min(MAX_STEER_VISUAL, yawRate * 0.35 * Math.sign(forwardSpeed || 1)));
+    const smooth = Math.min(1, dt * 5);
+    this.yawF += (Math.max(-4, Math.min(4, yawRate)) - this.yawF) * smooth;
+    const steerTarget = Math.max(-MAX_STEER_VISUAL, Math.min(MAX_STEER_VISUAL, this.yawF * 0.35 * Math.sign(forwardSpeed || 1)));
     this.steer += (steerTarget - this.steer) * Math.min(1, dt * 12);
     for (const w of this.wheels) {
       w.tyre.rotation.z = this.spin;
-      // Positive game yaw turns left; in this left-handed frame that is a negative Y rotation.
       w.pivot.rotation.y = w.front ? -this.steer : 0;
     }
 
-    // Body lean: roll out of corners, pitch under acceleration/braking, nose-up in the air.
-    const accel = dt > 0 ? (forwardSpeed - this.lastSpeed) / dt : 0;
+    const rawAccel = dt > 0 ? (forwardSpeed - this.lastSpeed) / dt : 0;
     this.lastSpeed = forwardSpeed;
+    this.accelF += (Math.max(-40, Math.min(40, rawAccel)) - this.accelF) * smooth;
     const airborne = (flags & CAR_FLAG.AIRBORNE) !== 0;
     // Left-handed frame: +rotation.x tips the roof towards the car's left, +rotation.z lifts the nose.
     // Lean out of the turn (opposite to yaw), squat under throttle, dive under braking.
-    const rollTarget = Math.max(-0.12, Math.min(0.12, -yawRate * forwardSpeed * 0.004));
-    const pitchTarget = airborne ? 0.12 : Math.max(-0.08, Math.min(0.08, accel * 0.004));
+    const rollTarget = Math.max(-0.1, Math.min(0.1, -this.yawF * forwardSpeed * 0.0035));
+    const pitchTarget = airborne ? 0.1 : Math.max(-0.06, Math.min(0.06, this.accelF * 0.003));
     const k = Math.min(1, dt * 8);
     this.roll += (rollTarget - this.roll) * k;
     this.pitch += (pitchTarget - this.pitch) * k;
@@ -159,9 +298,9 @@ class CarView {
     const ghost = (flags & (CAR_FLAG.FINISHED | CAR_FLAG.DISCONNECTED)) !== 0;
     const emp = (flags & CAR_FLAG.EMP) !== 0;
     const flash = now < this.flashUntil;
-    this.shellMat.emissiveColor = flash ? new Color3(1, 1, 1) : emp ? new Color3(0.1, 0.6, 0.8) : Color3.Black();
-    this.shellMat.alpha = ghost ? 0.45 : 1;
-    this.shellMat.diffuseColor = wrecked ? this.baseColor.scale(0.3) : this.baseColor;
+    this.paint.emissiveColor = flash ? new Color3(1, 1, 1) : emp ? new Color3(0.1, 0.6, 0.8) : wrecked ? Color3.Black() : new Color3(0.06, 0.06, 0.06);
+    this.paint.alpha = ghost ? 0.45 : 1;
+    this.paint.diffuseColor = wrecked ? new Color3(0.3, 0.3, 0.3) : Color3.White();
   }
 
   flash(now: number): void {

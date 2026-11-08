@@ -34,10 +34,13 @@ async function getClient(): Promise<RaceClient> {
 }
 
 function showTitle(): void {
-  screens.reset(new TitleScreen(session?.player.nickname ?? null, play));
+  screens.reset(new TitleScreen(session?.player.nickname ?? null, play, lastTrack));
 }
 
-async function play(nickname: string): Promise<void> {
+let lastTrack = "any";
+
+async function play(nickname: string, track = lastTrack): Promise<void> {
+  lastTrack = track;
   if (!session || session.player.nickname !== nickname || !(await checkSession(session))) {
     session = await guestLogin(nickname);
   }
@@ -59,7 +62,7 @@ async function play(nickname: string): Promise<void> {
       new ResultsScreen(
         r,
         rc.slot,
-        () => void play(nickname).catch(() => showTitle()),
+        () => void play(nickname, track).catch(() => showTitle()),
         () => void rc.leave().then(showTitle),
       ),
     );
@@ -74,9 +77,9 @@ async function play(nickname: string): Promise<void> {
   });
   screens.reset(lobby);
   try {
-    await rc.join(session.token);
+    await rc.join(session.token, track);
   } catch (err) {
-    screens.reset(new TitleScreen(nickname, play));
+    screens.reset(new TitleScreen(nickname, play, track));
     throw err;
   }
 }

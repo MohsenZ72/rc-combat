@@ -15,6 +15,7 @@ export interface Welcome {
   matchId: string;
   slot: number;
   trackId: string;
+  trackName: string;
   configHash: string;
   tickRate: number;
   snapshotDivisor: number;
@@ -76,10 +77,11 @@ export class Connection extends Emitter<NetEvents> {
   private room: Room | null = null;
   private malformed = 0;
 
-  async join(token: string): Promise<void> {
+  /** `track` is a track id or "any"; the server matches players per choice. */
+  async join(token: string, track = "any"): Promise<void> {
     const client = new Client(GAME_SERVER_URL);
     client.auth.token = token;
-    const room = await client.joinOrCreate("race");
+    const room = await client.joinOrCreate("race", { track });
     this.room = room;
     room.onMessage(MSG.WELCOME, (w: Welcome) => this.emit("welcome", w));
     room.onMessage(MSG.SNAPSHOT, (bytes: Uint8Array) => {

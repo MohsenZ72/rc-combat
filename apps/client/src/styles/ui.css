@@ -228,6 +228,54 @@ body {
   margin: 0;
 }
 
+/* ---------- map picker */
+.maps {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--rc-space-2);
+}
+.maps legend {
+  font-weight: 600;
+  color: var(--rc-ink-200);
+  margin-bottom: var(--rc-space-2);
+}
+.map-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--rc-space-3);
+  background: var(--rc-ink-950);
+  border: var(--rc-border-w) solid var(--rc-border);
+  border-radius: var(--rc-radius-md);
+  cursor: pointer;
+}
+.map-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.map-option:has(input:checked) {
+  border-color: var(--rc-tape);
+  background: rgb(255 201 51 / 8%);
+}
+.map-option:has(input:focus-visible) {
+  outline: 3px solid var(--rc-tape);
+  outline-offset: 2px;
+}
+.map-name {
+  font-family: var(--rc-font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.map-note {
+  font-size: 15px;
+  color: var(--rc-text-muted);
+}
+
 /* ---------- roster / tables */
 .roster {
   display: grid;

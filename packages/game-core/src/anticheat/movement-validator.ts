@@ -27,6 +27,8 @@ export interface MovementContext {
   /** Speed ceiling the car carried into this tick (decays after turbo/knockback). */
   prevSpeedCap: number;
   segmentHint?: number;
+  /** Legal extra acceleration this tick (m/s²), e.g. gravity on a downhill grade. */
+  extraAcceleration?: number;
 }
 
 export interface MovementViolation {
@@ -88,7 +90,7 @@ export function validateMovement(prev: KinematicSample, next: KinematicSample, c
 
   // Acceleration: speed gain per tick bounded by engine power (impulses excused).
   if (!ctx.impulse) {
-    const maxGain = limits.acceleration * dt * (1 + ac.accelerationTolerance) + 1e-6;
+    const maxGain = (limits.acceleration + (ctx.extraAcceleration ?? 0)) * dt * (1 + ac.accelerationTolerance) + 1e-6;
     const gain = Math.hypot(out.vx, out.vy) - prevSpeed;
     if (gain > maxGain) {
       violations.push({ kind: "acceleration", detail: `gain ${(gain / dt).toFixed(2)} m/s² > ${(maxGain / dt).toFixed(2)}` });

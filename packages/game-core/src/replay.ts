@@ -2,6 +2,7 @@ import { configHash, type GameConfig, type GameEvent, type PlayerSeat } from "@r
 import type { Rapier } from "./physics.js";
 import { RaceSimulation } from "./simulation.js";
 import { Track, type TrackDefinition } from "./track.js";
+import { TRACKS } from "./tracks/workshop-circuit.js";
 
 export const REPLAY_VERSION = 1;
 const KEYFRAME_FIELDS = 8;
@@ -115,7 +116,9 @@ export interface ReplayVerification {
  * Re-simulates a match from its seed and input log and compares against the
  * recorded keyframes. Used for dispute investigation and in tests.
  */
-export function verifyReplay(rapier: Rapier, replay: Replay, trackDef: TrackDefinition, tolerance = 0.01): ReplayVerification {
+export function verifyReplay(rapier: Rapier, replay: Replay, trackDef?: TrackDefinition, tolerance = 0.01): ReplayVerification {
+  trackDef ??= TRACKS[replay.header.trackId];
+  if (!trackDef) throw new Error(`unknown track ${replay.header.trackId}`);
   const { header } = replay;
   if (configHash(header.config) !== header.configHash) throw new Error("replay config hash mismatch");
   const sim = new RaceSimulation({ rapier, track: new Track(trackDef), config: header.config, seed: header.seed, slots: header.slots });

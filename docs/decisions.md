@@ -48,6 +48,21 @@ Short ADRs. Each one has its context, the decision, and its consequences. Add ne
 **Consequences:** gameplay is unaffected by chain latency or fees. Trust in the result signer is mitigated by KMS, multisig, timelock, an independent replay verifier and a refund deadline.
 
 ## ADR-011 · Jump as a default ability
-**Context:** the product owner asked for a default jump.
-**Decision:** edge-triggered, ground-only, 1.1 s cooldown, apex about 1.2 m, below the 1.4 m walls (and walls are infinite in physics anyway). Airborne cars dodge bolts, rockets and mines and can clear a car.
+**Context:** the product owner asked for a default jump, then for it to be high enough to clear another car.
+**Decision:** edge-triggered (Q), ground-only, 1.3 s cooldown, apex about 2.1 m (body height 1.0 m), so a car jumps cleanly over another. Visual barriers are 2.8 m and physics walls are infinite, so jumping never leaves the track.
 **Consequences:** a skill counter to every projectile. The validator covers height, take-off speed and mid-air lift.
+
+## ADR-012 · Handbrake on Space, separate from the brake
+**Context:** the owner wanted a handbrake that differs from braking and enables drifting.
+**Decision:** `BTN.HANDBRAKE` (bit 4, replacing the old drift button): gentle rear-lock deceleration, very low lateral grip, drift yaw multiplier; throttle + steer holds the slide after release. Jump moved to Q.
+**Consequences:** drifting is a real technique; it uses the same integrator on server and client, so prediction stays exact.
+
+## ADR-013 · House-themed maps, no road, diecast cars
+**Context:** the owner asked for no road, diecast toy cars, and tracks on toy track, a rug or kitchen tiles, with hills and water.
+**Decision:** `TrackDefinition` gains `theme`, optional heights per control point, water ranges, ramps and per-track laps. Physics stays 2D; the track's height profile feeds slope and water into the shared integrator, ramps launch cars, and rendering follows the ground. The client builds the theme (floor, surface continuing the floor, toy blocks or plastic rails, skirts or stands, water, props) and lofted diecast car bodies with liveries. Matchmaking filters by chosen map (`filterBy(["track"])`).
+**Consequences:** 4 maps with no new physics engine. No overpasses (2D walls can't cross); crest launches over hilltops are future work.
+
+## ADR-014 · Render-loop-driven prediction with interpolation
+**Context:** the owner reported the car shaking while driving.
+**Decision:** run input and prediction from the render loop with a fixed-step accumulator; draw the local car between the last two predicted steps; low-pass the body-lean inputs.
+**Consequences:** no 30 Hz stepping or trembling. A hidden tab sends a neutral input (rendering, and therefore input, pauses).

@@ -25,7 +25,12 @@ const minR = t.minCurvatureRadius();
 console.log(`${def.name}: length ${t.length.toFixed(1)} m, ${t.count} samples, ${t.gates.length} gates, ${t.boxes.length} item boxes`);
 console.log(`min curvature radius ${minR.toFixed(1)} m (needs > ${(t.halfWidth * 1.5).toFixed(1)}) ${minR > t.halfWidth * 1.5 ? "OK" : "FAIL"}`);
 console.log(`min clearance between distant parts ${minClear.toFixed(1)} m (needs > ${(def.width * 3).toFixed(1)}) ${minClear > def.width * 3 ? "OK" : "FAIL"}`);
+const elev = t.elevationStats();
+console.log(`elevation ${elev.min.toFixed(1)}–${elev.max.toFixed(1)} m, steepest grade ${(elev.maxSlope * 100).toFixed(1)}% (needs ≤ 25%) ${elev.maxSlope <= 0.25 ? "OK" : "FAIL"}`);
+console.log(`water ${t.waterRanges.length} stretch(es), ramps at ${t.rampS.map((r) => r.toFixed(0)).join(", ") || "none"} m`);
+let gridOk = true;
 for (let slot = 0; slot < 10; slot++) {
   const p = t.gridPose(slot);
-  console.log(`grid ${slot}: lateral ${t.project(p.x, p.y).lateral.toFixed(2)} m`);
+  gridOk &&= Math.abs(t.project(p.x, p.y).lateral) < t.halfWidth - 1.5;
 }
+console.log(`grid inside track ${gridOk ? "OK" : "FAIL"}`);

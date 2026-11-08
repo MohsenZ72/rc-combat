@@ -36,10 +36,13 @@ jobs:
       - run: npm test
       - name: Headless race (no false positives, replay verifies)
         run: |
-          for seed in 1 7 42; do
-            out=$(npx tsx --conditions=source packages/game-core/scripts/headless-race.ts $seed)
-            echo "$out" | grep -E "^ticks|^anomalies"
-            echo "$out" | grep -q "^anomalies 0 " || { echo "anomalies detected for seed $seed"; exit 1; }
-            echo "$out" | grep -q "ok: true" || { echo "replay verification failed for seed $seed"; exit 1; }
+          for track in workshop-circuit living-room-rug kitchen-tiles toy-track-canyon; do
+            for seed in 1 42; do
+              out=$(npx tsx --conditions=source packages/game-core/scripts/headless-race.ts $seed $track)
+              echo "$out" | grep -E "^track|^ticks|^anomalies"
+              echo "$out" | grep -q "^anomalies 0 " || { echo "anomalies on $track seed $seed"; exit 1; }
+              echo "$out" | grep -q "ok: true" || { echo "replay verification failed on $track seed $seed"; exit 1; }
+              echo "$out" | grep -q "end=all_finished\|end=grace_expired" || { echo "race did not finish on $track seed $seed"; exit 1; }
+            done
           done
       - run: npm run build -w @rc/client

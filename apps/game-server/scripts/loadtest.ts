@@ -11,7 +11,7 @@
  */
 import { Client } from "@colyseus/sdk";
 import { decodeSnapshot, DEFAULT_CONFIG, encodeInput, MSG, type Snapshot } from "@rc/shared";
-import { BotDriver, Track, WORKSHOP_CIRCUIT, type CarState } from "@rc/game-core";
+import { BotDriver, Track, TRACKS, WORKSHOP_CIRCUIT, type CarState } from "@rc/game-core";
 import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
@@ -29,7 +29,7 @@ const WS = process.env.VITE_GAME_SERVER_URL ?? `ws://localhost:${process.env.GAM
 const HTTP = WS.replace(/^ws/, "http");
 const KEY = process.env.INTERNAL_API_KEY ?? "";
 const TICK_MS = 1000 / Number(process.env.TICK_RATE ?? DEFAULT_CONFIG.net.tickRate);
-const track = new Track(WORKSHOP_CIRCUIT);
+const tracks = new Map(Object.values(TRACKS).map((d) => [d.id, new Track(d)]));
 
 interface ClientStats {
   joined: boolean;
@@ -84,13 +84,15 @@ async function runClient(token: string, index: number, stopAt: number): Promise<
   stats.joinMs = performance.now() - t0;
   let slot = -1;
   let bot: BotDriver | null = null;
+  let track = tracks.get(WORKSHOP_CIRCUIT.id)!;
   let cars: CarState[] = [];
   let lastSnapAt = 0;
   let seq = 0;
   let lastButtons = 0;
 
-  room.onMessage(MSG.WELCOME, (w: { slot: number }) => {
+  room.onMessage(MSG.WELCOME, (w: { slot: number; trackId: string }) => {
     slot = w.slot;
+    track = tracks.get(w.trackId) ?? track;
     bot = new BotDriver(slot, 1000 + index, 0.6);
   });
   room.onMessage(MSG.SNAPSHOT, (bytes: Uint8Array) => {

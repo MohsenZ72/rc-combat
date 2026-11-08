@@ -27,12 +27,12 @@ Every other client message type, including a known type sent in the wrong encodi
 | 1 | `BRAKE` | S / ↓ | LT / B |
 | 2 | `STEER_LEFT` | A / ← | stick / d-pad |
 | 3 | `STEER_RIGHT` | D / → | stick / d-pad |
-| 4 | `DRIFT` | Shift | RB |
+| 4 | `HANDBRAKE` | Space / Shift | RB |
 | 5 | `USE_ITEM` | E / Enter | X |
 | 6 | `FIRE` | F / J | Y / LB |
-| 7 | `JUMP` | Space | A |
+| 7 | `JUMP` | Q | A |
 
-`USE_ITEM` and `JUMP` are edge-triggered on the server (button newly pressed this tick). `FIRE` is level-triggered and limited by the server cooldown.
+`USE_ITEM` and `JUMP` are edge-triggered on the server (button newly pressed this tick). `FIRE` is level-triggered and limited by the server cooldown. **Look back (C / R3) is client-only**: it only moves the camera and is never sent.
 
 ### Snapshot layout (little-endian)
 
@@ -58,6 +58,9 @@ Measured at 30 Hz with 10 cars: about 12 KB/s down and under 0.1 KB/s up per pla
 4. Other cars are treated as obstacles at their last reported positions, using the server's impulse rule, so bumps are felt immediately.
 
 Rapier is WebAssembly, so wall physics is bit-identical in every browser. The remaining divergence comes from JS `Math.sin/cos` rounding and the obstacle approximation. Both are small and corrected every snapshot.
+
+### Smooth local rendering
+Input and prediction run inside the render loop with a fixed-step accumulator: exactly one input per server tick. The local car is drawn between the last two predicted steps using the leftover accumulator as the blend factor, so it moves smoothly at 60/120/144 Hz instead of stepping at 30 Hz. Body roll and pitch use low-pass-filtered acceleration and yaw rate (raw values step at the network rate and would make the car tremble).
 
 ## Interpolation (everyone else)
 

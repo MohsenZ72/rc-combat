@@ -38,7 +38,7 @@ So the classic browser cheats (editing memory, patching JS, forging packets to c
 3. **Movement validator.** Every tick it compares the new state with the previous **validated** state, with tolerance:
    * NaN/∞ → `invalid_state` (respawn)
    * speed above the legal cap (with decay after turbo or knockback) → `speed` (clamp)
-   * speed gain above engine power → `acceleration` (clamp), unless an impulse excuses it
+   * speed gain above engine power (plus gravity on a downhill grade) → `acceleration` (clamp), unless an impulse excuses it
    * yaw change above the maximum rate → `rotation` (clamp)
    * distance above `max(speed)·dt + slack` → `teleport` (revert to previous position)
    * height above `v²/2g`, take-off speed too high, lift while airborne → `jump` (clamp)

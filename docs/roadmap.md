@@ -2,8 +2,8 @@
 
 ## Known limitations (honest list)
 
-* **Art is placeholder geometry.** Primitive meshes, no audio, no particles beyond pooled spheres, no post-processing.
-* **One track, one car**, a flat 2D physics plane (no ramps or banking). The jump is a scalar arc.
+* **Art is procedural geometry.** Lofted diecast car bodies and primitive props; no audio, no particles beyond pooled spheres, no post-processing.
+* **Four maps on a 2D physics plane with a height profile.** No overpasses or loops, no banking, no launch off hill crests (only ramps and jumps).
 * **Prediction ignores remote-car motion.** Other cars are static obstacles at their last snapshot, so close side-by-side racing shows small corrections. Remote cars are drawn 70 ms in the past.
 * **Rocket/bolt hits are judged on the server's present**, with no lag compensation (rewind). High-ping shooters must lead their target more. Fine for 30 Hz WebSockets at normal pings; add rewind later if needed.
 * **WebSocket (TCP)**: head-of-line blocking on packet loss. WebTransport/WebRTC data channels are a later option.
@@ -19,7 +19,8 @@
 ## Next steps (priority order)
 
 ### 1. Gameplay polish
-* Real car and prop models (glTF, Draco/KTX2 compressed, lazy-loaded), tyre smoke, sparks on wall scrapes, a rocket trail, explosions with particles.
+* Real models. Props from free CC0 kits (Kenney furniture/kitchen/toy kits, Quaternius) as glTF with Draco/KTX2. Hero diecast cars from reference photos via image-to-3D (the Higgsfield `generate_3d` MCP is already connected; Meshy/Tripo are paid alternatives) or a Blender MCP. All lazy-loaded.
+* Tyre smoke while drifting, water splashes, sparks on wall scrapes, a rocket trail, explosions with particles.
 * Audio: engine pitch by speed, impacts, item cues, countdown beeps.
 * Camera shake and FOV kick on turbo and hits; drift boost (mini-turbo after a long drift).
 * Ramps and jump pads (needs 3D or a height field on the track spline).

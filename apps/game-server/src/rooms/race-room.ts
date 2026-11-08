@@ -1,6 +1,6 @@
 import { Room, ServerError, type AuthContext, type Client } from "colyseus";
 import { MSG, Phase, type GameConfig } from "@rc/shared";
-import type { Rapier, Track } from "@rc/game-core";
+import { configForTrack, type Rapier, type Track } from "@rc/game-core";
 import type { BackendPort } from "../api-client.js";
 import { AuthError, type AuthenticatedPlayer, type TokenVerifier } from "../auth.js";
 import type { Env } from "../env.js";
@@ -13,7 +13,8 @@ export interface RoomDeps {
   env: Env;
   config: GameConfig;
   rapier: Rapier;
-  track: Track;
+  /** Every playable track, built once per process. */
+  tracks: Map<string, Track>;
   verifier: TokenVerifier;
   backend: BackendPort;
   log: Logger;
@@ -49,8 +50,16 @@ export class RaceRoom extends Room<{ state: RaceStateT; client: RaceClient }> {
     }
   }
 
-  override onCreate(): void {
-    const { env, config, rapier, track } = RaceRoom.deps;
+  /**
+   * `options.track` is a track id or "any". Matchmaking filters on it (see index.ts), so
+   * players who picked a map only meet each other; "any" rooms pick a random map.
+   */
+  override onCreate(options: { track?: unknown } = {}): void {
+    const { env, rapier, tracks } = RaceRoom.deps;
+    const requested = typeof options.track === "string" && tracks.has(options.track) ? options.track : null;
+    const ids = [...tracks.keys()];
+    const track = tracks.get(requested ?? ids[Math.floor(Math.random() * ids.length)]!)!;
+    const config = configForTrack(RaceRoom.deps.config, track.def);
     this.maxClients = env.MAX_PLAYERS;
     this.session = new MatchSession({ rapier, track, config, serverId: env.GAME_SERVER_ID });
     this.log = RaceRoom.deps.log.child({ matchId: this.session.matchId, roomId: this.roomId });
@@ -59,6 +68,7 @@ export class RaceRoom extends Room<{ state: RaceStateT; client: RaceClient }> {
     state.matchId = this.session.matchId;
     state.trackId = track.def.id;
     state.laps = config.race.laps;
+    void this.setMetadata({ trackId: track.def.id, trackName: track.def.name });
     state.minPlayers = env.MIN_PLAYERS;
     state.maxPlayers = env.MAX_PLAYERS;
     state.lobbyEndsAt = 0;

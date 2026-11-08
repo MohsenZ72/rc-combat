@@ -115,7 +115,9 @@ export class RaceSimulation {
     for (let slot = 0; slot < opts.slots; slot++) {
       const pose = opts.track.gridPose(slot);
       const car = createCar(slot, pose.x, pose.y, pose.heading, opts.config.car.maxHealth, opts.config.items.bolt.maxAmmo, opts.config.car.maxSpeed);
-      car.segmentHint = opts.track.project(pose.x, pose.y).segment;
+      const proj0 = opts.track.project(pose.x, pose.y);
+      car.segmentHint = proj0.segment;
+      car.trackS = proj0.s;
       this.cars.push(car);
       this.suspicion.push(new SuspicionTracker(opts.config.antiCheat, this.tickRate));
       this.prev.push({ x: car.x, y: car.y, heading: car.heading, vx: 0, vy: 0, z: 0, vz: 0 });
@@ -200,7 +202,9 @@ export class RaceSimulation {
       const buttons = car.disconnected ? 0 : (inputs[car.slot] ?? 0) & BTN_MASK;
       this.tickTimers(car);
       this.handleActions(car, buttons);
-      if (integrateMovement(car, buttons, dt, this.config, car.lastButtons)) {
+      const surface = this.track.surfaceUnder(car.x, car.y, car.heading, car.segmentHint);
+      car.surfaceSlope = surface.slope;
+      if (integrateMovement(car, buttons, dt, this.config, car.lastButtons, surface)) {
         this.emit({ type: "jump", tick: this.tick, slot: car.slot });
       }
       car.lastButtons = buttons;
@@ -430,6 +434,8 @@ export class RaceSimulation {
       respawned: car.respawnedThisTick,
       prevSpeedCap: car.speedCap,
       segmentHint: car.segmentHint,
+      // Gravity on a downhill grade is a legal source of acceleration.
+      extraAcceleration: this.config.car.gravity * this.config.car.slopeFactor * Math.max(0, -car.surfaceSlope),
     });
     for (const v of verdict.violations) this.reportAnomaly(car.slot, v.kind, v.detail);
     if (verdict.corrected) {
@@ -455,7 +461,9 @@ export class RaceSimulation {
     car.x = x;
     car.y = y;
     car.heading = heading;
-    car.segmentHint = this.track.project(x, y).segment;
+    const p = this.track.project(x, y);
+    car.segmentHint = p.segment;
+    car.trackS = p.s;
     this.physics.setCarPosition(slot, x, y);
     this.commitBaseline(car);
   }
@@ -497,7 +505,17 @@ export class RaceSimulation {
 
     const proj = this.track.project(car.x, car.y, car.segmentHint);
     const prevProgress = car.progress;
+    const prevS = car.trackS;
     car.segmentHint = proj.segment;
+    car.trackS = proj.s;
+    // Ramp lips launch grounded cars that hit them fast enough (same take-off speed rules as a jump).
+    if (!car.respawnedThisTick && car.z === 0 && car.vz === 0 && car.wreckTicks === 0 && this.track.rampCrossed(prevS, proj.s)) {
+      const forward = car.vx * proj.tangentX + car.vy * proj.tangentY;
+      if (forward >= this.config.car.rampMinSpeed) {
+        car.vz = Math.min(this.config.car.rampVelocity, this.config.car.jumpVelocity);
+        this.emit({ type: "jump", tick: this.tick, slot: car.slot });
+      }
+    }
     car.progress = computeProgress(car, this.track, proj.s);
     const maxStep = absoluteSpeedCeiling(this.config) * this.dt * this.config.antiCheat.progressJumpFactor + 0.5;
     if (!car.respawnedThisTick && car.progress - prevProgress > maxStep && prevProgress !== 0) {
@@ -532,7 +550,9 @@ export class RaceSimulation {
     car.wreckTicks = 0;
     car.spawnProtectTicks = secondsToTicks(this.config.race.respawnProtectionSeconds, this.tickRate);
     car.respawnedThisTick = true;
-    car.segmentHint = this.track.project(car.x, car.y).segment;
+    const p = this.track.project(car.x, car.y);
+    car.segmentHint = p.segment;
+    car.trackS = p.s;
     this.physics.setCarPosition(car.slot, car.x, car.y);
     this.emit({ type: "respawn", tick: this.tick, slot: car.slot });
   }

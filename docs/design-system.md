@@ -101,9 +101,13 @@ Below 720 px wide the feed hides, panels tighten, and the item slot shrinks.
 
 ## 3D art direction
 
-* **Scale:** the cars are toys; the props (toolboxes, paint cans, bolts, cartons) are giant.
-* **Track:** dark rubber mat, white edge tape, walls of alternating yellow and dark tape blocks, a checkered start line, and a yellow banner arch.
-* **Cars:** a low-poly buggy with a paint-coloured shell and wing, whip antenna with a glowing tip, round torus tyres with 5-spoke rims and paint-coloured hubs. Wheels roll by distance; front wheels steer; the body leans out of turns, squats under throttle, dives under braking and noses up in the air.
+* **Scale:** the cars are diecast toys; the house is giant (sofa, fridge, table legs, mugs, fruit, toy blocks, toy boxes).
+* **No asphalt, ever.** Themes (`apps/client/src/render/themes.ts`):
+  * *Toy track*: orange plastic strip with guide grooves and piece joints on wooden planks; low orange rails plus a faint clear guard panel showing the real wall.
+  * *Rug*: a finely tiled Persian-style field with a woven border band; walls of coloured toy building blocks; the rug drapes over cushion hills.
+  * *Kitchen*: ceramic tiles continue under the racing line; pastel toy-block walls; water spills; a wooden serving tray section.
+  * *Toy canyon*: blue plastic track on yellow stands over carpet, clear guards, a water tray at the bottom.
+* **Cars:** diecast sports cars in three lofted body styles (supercar with wing, muscle, rally), glossy paint (high specular), twin roof stripes, door number roundels, dark glass cabin, emissive head and tail lights, small round torus tyres (scaled before rotation so they stay circular) with chrome 5-spoke rims. Wheels roll by distance; front wheels steer; the body leans out of turns (filtered), squats under throttle and noses up in the air.
 * **Feedback:** white flash on hit, cyan tint under EMP, transparent cyan bubble for shield or spawn protection, orange flame for turbo, flipped dark car when wrecked, ghosted at 45% when finished or disconnected.
 
 ## Voice
