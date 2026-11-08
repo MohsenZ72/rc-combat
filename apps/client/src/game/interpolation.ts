@@ -58,7 +58,16 @@ export class SnapshotInterpolator {
         out.push(cb);
         continue;
       }
-      out.push({ ...cb, x: lerp(ca.x, cb.x, t), y: lerp(ca.y, cb.y, t), z: lerp(ca.z, cb.z, t), heading: lerpAngle(ca.heading, cb.heading, t) });
+      out.push({
+        ...cb,
+        x: lerp(ca.x, cb.x, t),
+        y: lerp(ca.y, cb.y, t),
+        z: lerp(ca.z, cb.z, t),
+        heading: lerpAngle(ca.heading, cb.heading, t),
+        // A flip is a full roll: interpolate the shortest way round.
+        roll: lerpAngle(ca.roll, cb.roll, t),
+        pitch: lerp(ca.pitch, cb.pitch, t),
+      });
     }
     return out;
   }

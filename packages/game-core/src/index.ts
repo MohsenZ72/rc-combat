@@ -4,6 +4,7 @@ export * from "./track.js";
 export * from "./tracks/workshop-circuit.js";
 export * from "./car.js";
 export * from "./vehicle.js";
+export * from "./impact.js";
 export * from "./physics.js";
 export * from "./race.js";
 export * from "./simulation.js";

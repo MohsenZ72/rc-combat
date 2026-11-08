@@ -29,7 +29,7 @@ Open <http://localhost:5173>, pick a name, press **Find a race**. With dev setti
 ## Tests
 
 ```bash
-npm test                                   # 112 tests (game-core 84, game-server 11, API e2e 17; needs db:up)
+npm test                                   # 131 tests (game-core 103, game-server 11, API e2e 17; needs db:up)
 npm run typecheck
 npm run loadtest -- --clients 200 --seconds 60
 ```

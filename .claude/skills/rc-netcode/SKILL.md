@@ -32,7 +32,7 @@ Read `docs/system-design/02-networking.md` first.
 * Other cars are obstacles (`setObstacles`) with the server impulse formula.
 
 ## Rates
-`TICK_RATE` (env, default 30), `SNAPSHOT_DIVISOR` (default 1), `interpolationDelayMs` (70) in config. Changing them changes bandwidth (≈12 KB/s/player at 30 Hz) — rerun the load test and update docs/testing.md.
+`TICK_RATE` (env, default 30), `SNAPSHOT_DIVISOR` (default 1), `interpolationDelayMs` (70) in config. Changing them changes bandwidth (≈14.5 KB/s/player at 30 Hz since protocol v2) — rerun the load test and update docs/testing.md.
 
 ## Colyseus 0.18 specifics
 Load the `colyseus` skill. Bytes: `room.sendBytes` / `this.onMessageBytes`. Reconnection: `onDrop` → `allowReconnection`, `onReconnect`, `onLeave` = gone. Close codes 4011–4999.

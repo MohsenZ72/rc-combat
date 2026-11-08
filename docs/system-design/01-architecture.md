@@ -29,7 +29,7 @@ flowchart LR
 
   UI --> N
   N -- "INPUT 3 bytes @30 Hz" --> RR
-  RR -- "SNAPSHOT ~40 B/car @30 Hz, EVENTS, RESULTS" --> N
+  RR -- "SNAPSHOT ~48 B/car @30 Hz, EVENTS, RESULTS" --> N
   N --> P --> R
   RR --> MS --> SIM
   MS --> AC

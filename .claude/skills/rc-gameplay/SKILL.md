@@ -22,6 +22,11 @@ Read `docs/game-design.md`.
 * Jump (`BTN.JUMP`, Q): `jumpVelocity`, `gravity`, `jumpCooldown`; apex = v²/2g must stay below the 2.8 m barrier visuals and above `bodyHeight` (1.0 m) so cars can clear each other.
 * Terrain comes in as `Surface { slope, water }` from `Track.surfaceUnder`; ramps launch in `RaceSimulation.updateRace` and in `CarPredictor`.
 
+## Collisions (impact.ts)
+* `DEFAULT_CONFIG.impact`: mass/turbo ram, capsule shape, yaw inertia, friction, bounce threshold, spin ceiling/decay, traction loss, roll/pitch spring and kicks, flip threshold/length/hop, mine hop. Restitution stays in `car.wallRestitution` / `car.carRestitution`.
+* `resolveCarImpact` (car-car), `applyWallImpact` (walls), `applyKnock` (anything that changes a car's velocity from outside: also call it for new knockback items). All shared with `CarPredictor`.
+* Any new impact field must go into `MovementState`, the snapshot and `CarPredictor.reconcile`; the validator only lets `spin` grow on an `impulseThisTick` tick.
+
 ## Change car handling
 * Edit `DEFAULT_CONFIG.car`; the integrator is `integrateMovement` (shared with client prediction).
 * The validator derives limits from the same config (`movementLimits`, `absoluteSpeedCeiling`, `maxJumpHeight`). If you add a new speed or height source, extend those helpers and the validator.

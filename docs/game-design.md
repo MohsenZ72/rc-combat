@@ -29,11 +29,28 @@
 | Health | 100 |
 | Handbrake | 9 m/s² (brake is 34), rear grip 1.4 (normal 9): the car slides |
 | Jump | 9.6 m/s take-off, 22 m/s² gravity, apex about 2.1 m, about 0.87 s in the air, 1.3 s cooldown |
-| Collision | 1.3 m radius, 1.0 m body height; bumps with restitution 0.6 |
+| Collision | walls: 1.3 m radius sweep; car to car: 2.6 m × 1.5 m capsule, 1.0 m body height (see Collisions) |
 
 ### Handbrake drift (Space)
 
 Separate from the brake. It locks the rear: gentle deceleration, almost no sideways grip, and stronger yaw. Flick it to rotate into a hairpin. Release it while holding **throttle + steer** to keep the power slide going until the sideways speed is gone.
+
+### Collisions (knocked off balance)
+
+Hits are impulses, not stops. Readable and fun first, physics second; everything below runs in the shared sim (`impact.ts`), so prediction and replays stay exact.
+
+| What | Rule | Numbers |
+|---|---|---|
+| Car vs car | momentum exchange by mass, restitution, Coulomb friction at the contact point | restitution 0.55 (0 below 2 m/s), friction 0.35, all cars mass 1 |
+| Turbo ram | a car on turbo hits like a heavier car: it shoves harder and loses less speed | mass ×1.5 |
+| Off-centre hits | the contact point is on a capsule along the car, so a hit on a rear quarter spins the car (PIT); a centred hit pushes it straight | yaw inertia 1.1 m², spin ≤ 7 rad/s, decays at 2.6/s |
+| Walls and barriers | bounce instead of a dead stop; a glancing nose hit turns the car away from the wall; slow contact is a scrape (no bounce, no spin) | restitution 0.45 above 2 m/s normal speed, friction 0.3 |
+| Traction loss | after a sideways shove or a spin the tyres lose grip and steering, then recover linearly; a straight push barely counts | from 3 m/s (short) to 12 m/s (full), up to 0.6 s, −75% grip/steer at the start |
+| Body roll / pitch | side hits roll the body (two wheels lift on hard ones), front/rear hits pitch it (nose dives into a wall); a damped spring wobbles it back | kick 0.7 (roll) / 0.4 (pitch) rad/s per m/s, spring 110/s², damping 7/s |
+| Flip | a very hard sideways hit (≥ 12 m/s of sideways speed change, e.g. a full-speed T-bone) rolls the car over once with a small hop; controls are locked and grip is low until it lands back on its wheels | 0.9 s, hop 4.5 m/s |
+| Rocket / mine | a rocket always rolls the target over (and spins it if it hits off-centre); a mine pops the car up and lurches it | mine hop 3.5 m/s |
+
+A flip lands upright by itself, so there is no extra recovery step; the existing wreck/respawn path is unchanged. Weapons and items are locked while rolling.
 
 ### Jump (default ability, Q)
 
@@ -97,4 +114,5 @@ Item boxes: 4 rows of 4, respawn after 6 s, one held item at a time. Rolls are *
 
 * Full race: 250 s for the last finisher, all bots finish.
 * About 320 hits and 20 wrecks per race: combat matters but doesn't dominate.
+* Collisions (10 maps × 3 seeds): about 15–95 car hits and 0–30 wall hits per race, 1–27 spin-outs, 0–9 two-wheel tips, and 1–8 flips (almost all from rockets; a car-on-car flip needs a near full-speed T-bone). Winning times stay within a few seconds of the old model, zero anomalies and exact replays everywhere; in 29 of 30 races every bot finished (once the slowest bot missed the 30 s grace after three wrecks).
 * Zero anti-cheat anomalies across seeds, which is a hard requirement for every balance change (`headless-race.ts`).
