@@ -1,8 +1,9 @@
-import { Color3, MeshBuilder, TransformNode, type Mesh, type Scene, type StandardMaterial } from "@babylonjs/core";
+import { Color3, MeshBuilder, TransformNode, Vector3, type Mesh, type Scene, type StandardMaterial } from "@babylonjs/core";
 import { CAR_FLAG } from "@rc/shared";
 import { mat, toWorld, type World } from "./world.js";
 
 const WHEEL_RADIUS = 0.45;
+const TYRE_THICKNESS = 0.24;
 const MAX_STEER_VISUAL = 0.45;
 
 interface Wheel {
@@ -46,6 +47,7 @@ class CarView {
     const dark = mat(scene, `chassis${slot}`, "#15181d", { specular: 0.2 });
     const tyreMat = mat(scene, `tyre${slot}`, "#0b0c0e", { specular: 0.05 });
     const rimMat = mat(scene, `rim${slot}`, "#c9d0db", { specular: 0.7 });
+    const rimDarkMat = mat(scene, `rimd${slot}`, "#3a4150", { specular: 0.4 });
 
     const parts: Mesh[] = [];
     const add = (m: Mesh, x: number, y: number, z: number, material: StandardMaterial) => {
@@ -67,20 +69,34 @@ class CarView {
       const pivot = new TransformNode("wheel-pivot", scene);
       pivot.parent = this.root;
       pivot.position.set(x, WHEEL_RADIUS, z);
-      // Cylinder axis is Y; bake it onto Z so the axle points sideways and spin is a pure Z rotation.
-      const tyre = MeshBuilder.CreateCylinder("tyre", { diameter: WHEEL_RADIUS * 2, height: 0.42, tessellation: 16 }, scene);
+      // Rounded rubber tyre: a smooth torus (48 segments) around the axle. Babylon builds
+      // tori/cylinders around Y, so bake a 90° X rotation to put the axle on Z.
+      const tyre = MeshBuilder.CreateTorus("tyre", { diameter: WHEEL_RADIUS * 2 - TYRE_THICKNESS, thickness: TYRE_THICKNESS, tessellation: 48 }, scene);
       tyre.rotation.x = Math.PI / 2;
+      tyre.scaling.z = 1.7; // wide RC buggy tread
       tyre.bakeCurrentTransformIntoVertices();
       tyre.material = tyreMat;
       tyre.parent = pivot;
-      // Two crossed spokes on the outer face make the rotation visible.
-      for (const angle of [0, Math.PI / 2]) {
-        const spoke = MeshBuilder.CreateBox("spoke", { width: WHEEL_RADIUS * 1.5, height: 0.12, depth: 0.05 }, scene);
+      const side = z > 0 ? 1 : -1;
+      // Rim disc fills the tyre, then five spokes and a hub cap on the outer face.
+      const rim = MeshBuilder.CreateCylinder("rim", { diameter: (WHEEL_RADIUS - TYRE_THICKNESS) * 2 + 0.08, height: 0.2, tessellation: 40 }, scene);
+      rim.rotation.x = Math.PI / 2;
+      rim.bakeCurrentTransformIntoVertices();
+      rim.material = rimDarkMat;
+      rim.parent = tyre;
+      for (let k = 0; k < 5; k++) {
+        const spoke = MeshBuilder.CreateBox("spoke", { width: WHEEL_RADIUS - TYRE_THICKNESS + 0.02, height: 0.07, depth: 0.04 }, scene);
+        spoke.setPivotPoint(new Vector3(-(WHEEL_RADIUS - TYRE_THICKNESS + 0.02) / 2, 0, 0));
+        spoke.position.set((WHEEL_RADIUS - TYRE_THICKNESS + 0.02) / 2, 0, side * 0.11);
+        spoke.rotation.z = (k * Math.PI * 2) / 5;
         spoke.material = rimMat;
-        spoke.rotation.z = angle;
-        spoke.position.z = z > 0 ? 0.22 : -0.22;
         spoke.parent = tyre;
       }
+      const hub = MeshBuilder.CreateCylinder("hub", { diameter: 0.14, height: 0.06, tessellation: 20 }, scene);
+      hub.rotation.x = Math.PI / 2;
+      hub.position.z = side * 0.13;
+      hub.material = mat(scene, `hub${slot}`, color, { specular: 0.8 });
+      hub.parent = tyre;
       this.wheels.push({ pivot, tyre, front: x > 0 });
       world.shadows.addShadowCaster(tyre);
     }
