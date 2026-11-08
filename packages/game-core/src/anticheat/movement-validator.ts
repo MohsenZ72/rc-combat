@@ -1,0 +1,139 @@
+import type { AnomalyKind, GameConfig } from "@rc/shared";
+import { angleDelta, isFiniteNumber } from "../math.js";
+import type { Track } from "../track.js";
+import { absoluteSpeedCeiling, movementLimits, OVERSPEED_DECAY } from "../vehicle.js";
+
+export interface KinematicSample {
+  x: number;
+  y: number;
+  heading: number;
+  vx: number;
+  vy: number;
+}
+
+export interface MovementContext {
+  dt: number;
+  config: GameConfig;
+  track: Track;
+  /** Turbo active at the start or end of the tick. */
+  turbo: boolean;
+  /** An external impulse (hit, car bump) legitimately changed velocity. */
+  impulse: boolean;
+  /** The car was respawned this tick; position jumps are expected. */
+  respawned: boolean;
+  /** Speed ceiling the car carried into this tick (decays after turbo/knockback). */
+  prevSpeedCap: number;
+  segmentHint?: number;
+}
+
+export interface MovementViolation {
+  kind: AnomalyKind;
+  detail: string;
+}
+
+export interface MovementVerdict {
+  violations: MovementViolation[];
+  /** Corrected state to use instead of `next`, or null if `next` is legitimate. */
+  corrected: KinematicSample | null;
+  /** The car must be put back on the track at its last checkpoint. */
+  respawn: boolean;
+}
+
+/**
+ * Checks one simulated tick of movement against physical limits.
+ *
+ * The client cannot send positions, so in normal operation this never
+ * fires. It is defence in depth against physics bugs, tunnelling, corrupted
+ * state or exploits in other systems, and the same checks would apply if a
+ * future mode accepted client-side physics. Limits carry tolerance so
+ * floating-point noise and legitimate edge cases never trigger it.
+ */
+export function validateMovement(prev: KinematicSample, next: KinematicSample, ctx: MovementContext): MovementVerdict {
+  const violations: MovementViolation[] = [];
+  const { config, dt } = ctx;
+  const ac = config.antiCheat;
+
+  const values = [next.x, next.y, next.heading, next.vx, next.vy];
+  if (!values.every(isFiniteNumber)) {
+    return { violations: [{ kind: "invalid_state", detail: "non-finite kinematics" }], corrected: null, respawn: true };
+  }
+  if (ctx.respawned) return { violations, corrected: null, respawn: false };
+
+  const limits = movementLimits({ turboTicks: ctx.turbo ? 1 : 0, drifting: false }, config);
+  const ceiling = absoluteSpeedCeiling(config);
+  const prevSpeed = Math.hypot(prev.vx, prev.vy);
+  const nextSpeed = Math.hypot(next.vx, next.vy);
+  const out: KinematicSample = { ...next };
+  let changed = false;
+  const fix = (): KinematicSample => {
+    changed = true;
+    return out;
+  };
+
+  // Speed: within the legal cap (with tolerance). Over-cap speed is only legal
+  // when it is decaying from a turbo/knockback ceiling or caused by an impulse.
+  const legalCap = Math.max(limits.maxSpeed, ctx.prevSpeedCap) * (1 + ac.speedTolerance);
+  const hardCap = ceiling * (1 + ac.speedTolerance);
+  if (nextSpeed > hardCap || (!ctx.impulse && nextSpeed > legalCap)) {
+    const allowed = ctx.impulse ? hardCap : Math.max(limits.maxSpeed, ctx.prevSpeedCap - OVERSPEED_DECAY * dt);
+    violations.push({ kind: "speed", detail: `speed ${nextSpeed.toFixed(2)} > ${allowed.toFixed(2)}` });
+    const k = allowed / nextSpeed;
+    const c = fix();
+    c.vx *= k;
+    c.vy *= k;
+  }
+
+  // Acceleration: speed gain per tick bounded by engine power (impulses excused).
+  if (!ctx.impulse) {
+    const maxGain = limits.acceleration * dt * (1 + ac.accelerationTolerance) + 1e-6;
+    const gain = Math.hypot(out.vx, out.vy) - prevSpeed;
+    if (gain > maxGain) {
+      violations.push({ kind: "acceleration", detail: `gain ${(gain / dt).toFixed(2)} m/s² > ${(maxGain / dt).toFixed(2)}` });
+      const c = fix();
+      const s = Math.hypot(c.vx, c.vy);
+      if (s > 0) {
+        const k = (prevSpeed + maxGain) / s;
+        c.vx *= k;
+        c.vy *= k;
+      }
+    }
+  }
+
+  // Rotation: heading change per tick bounded by max yaw rate.
+  const maxYaw = limits.maxYawRate * dt * (1 + ac.rotationTolerance) + 1e-6;
+  const dHeading = angleDelta(prev.heading, next.heading);
+  if (Math.abs(dHeading) > maxYaw) {
+    violations.push({ kind: "rotation", detail: `yaw ${(dHeading / dt).toFixed(2)} rad/s` });
+    fix().heading = prev.heading + Math.sign(dHeading) * maxYaw;
+  }
+
+  // Teleport: distance travelled bounded by the faster of the two speeds.
+  const travelled = Math.hypot(next.x - prev.x, next.y - prev.y);
+  // Car-on-car separation can shift a car by up to one radius without changing its speed.
+  const separation = ctx.impulse ? config.car.radius * 2 : 0;
+  const maxTravel =
+    Math.max(prevSpeed, Math.min(nextSpeed, ctx.impulse ? hardCap : legalCap)) * dt * (1 + ac.speedTolerance) + ac.teleportSlack + separation;
+  if (travelled > maxTravel) {
+    violations.push({ kind: "teleport", detail: `moved ${travelled.toFixed(2)}m > ${maxTravel.toFixed(2)}m` });
+    const c = fix();
+    c.x = prev.x;
+    c.y = prev.y;
+  }
+
+  // Bounds: the walls are at ±halfWidth; the car centre can get within its radius.
+  const px = out.x;
+  const py = out.y;
+  const proj = ctx.track.project(px, py, ctx.segmentHint ?? -1);
+  const edge = ctx.track.halfWidth - config.car.radius;
+  const beyond = Math.abs(proj.lateral) - edge;
+  let respawn = false;
+  if (beyond > ac.boundsSlack + 4) {
+    violations.push({ kind: "out_of_bounds", detail: `lateral ${proj.lateral.toFixed(2)}m` });
+    respawn = true;
+  } else if (beyond > ac.boundsSlack) {
+    violations.push({ kind: "wall_clip", detail: `lateral ${proj.lateral.toFixed(2)}m` });
+    respawn = true;
+  }
+
+  return { violations, corrected: changed ? out : null, respawn };
+}

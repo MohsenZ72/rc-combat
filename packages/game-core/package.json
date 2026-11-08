@@ -1,0 +1,27 @@
+{
+  "name": "@rc/game-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@dimforge/rapier2d-compat": "0.21.0",
+    "@rc/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^5.1.0"
+  }
+}
