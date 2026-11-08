@@ -50,6 +50,7 @@ export class World {
   private readonly hemi: HemisphericLight;
   private readonly sun: DirectionalLight;
   private camPos = new Vector3(0, 30, -30);
+  private shakeAmount = 0;
   private camTarget = new Vector3(0, 0, 0);
   private trackRoot: TransformNode | null = null;
   private waterMats: StandardMaterial[] = [];
@@ -94,6 +95,11 @@ export class World {
     return { h: this.track.heightAt(p.s), segment: p.segment };
   }
 
+  /** Kick the chase camera (explosions nearby); decays over ~0.4 s. */
+  shake(power: number): void {
+    this.shakeAmount = Math.min(1.2, this.shakeAmount + power);
+  }
+
   /** Smooth chase camera behind a pose (height = ground + jump). */
   follow(x: number, y: number, height: number, heading: number, speed: number, dtSeconds: number, snap = false): void {
     const fx = Math.cos(heading);
@@ -106,6 +112,11 @@ export class World {
     this.camPos = Vector3.Lerp(this.camPos, desired, k);
     this.camTarget = Vector3.Lerp(this.camTarget, target, snap ? 1 : 1 - Math.exp(-dtSeconds * 10));
     this.camera.position.copyFrom(this.camPos);
+    if (this.shakeAmount > 0.01) {
+      const a = this.shakeAmount * 0.6;
+      this.camera.position.addInPlace(new Vector3((Math.random() - 0.5) * a, (Math.random() - 0.5) * a, (Math.random() - 0.5) * a));
+      this.shakeAmount *= Math.exp(-dtSeconds * 8);
+    }
     this.camera.setTarget(this.camTarget);
   }
 

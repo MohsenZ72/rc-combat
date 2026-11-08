@@ -102,6 +102,8 @@ Below 720 px wide the feed hides, panels tighten, and the item slot shrinks.
 ## 3D art direction
 
 * **Scale:** the cars are diecast toys; the house is giant (sofa, fridge, table legs, mugs, fruit, toy blocks, toy boxes).
+* **Rooms, not backdrops.** `render/room/` builds each map as a furnished room (furniture kit in `furniture.ts`, layouts in `rooms.ts`): walls with dado line and skirting, windows with curtains, doors, pictures, ceiling lights, furniture against the walls at toy scale (1 cm ≈ 0.72 m), a centre piece where the track leaves space, and thin-instanced floor clutter. Pieces that would touch the racing line are dropped automatically.
+* **Effects** (`render/fx/particles.ts`, pooled): rocket exhaust and smoke trail, fuse sparks on bombs, fire, smoke and debris explosions with camera shake, bolt sparks, EMP arcs, repair sparkles, tyre smoke while drifting, water spray, gift-box item boxes that burst into sparkles.
 * **No asphalt, ever.** Themes (`apps/client/src/render/themes.ts`):
   * *Toy track*: orange plastic strip with guide grooves and piece joints on wooden planks; low orange rails plus a faint clear guard panel showing the real wall.
   * *Rug*: a finely tiled Persian-style field with a woven border band; walls of coloured toy building blocks; the rug drapes over cushion hills.

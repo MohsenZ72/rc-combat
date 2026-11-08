@@ -62,6 +62,11 @@ Short ADRs. Each one has its context, the decision, and its consequences. Add ne
 **Decision:** `TrackDefinition` gains `theme`, optional heights per control point, water ranges, ramps and per-track laps. Physics stays 2D; the track's height profile feeds slope and water into the shared integrator, ramps launch cars, and rendering follows the ground. The client builds the theme (floor, surface continuing the floor, toy blocks or plastic rails, skirts or stands, water, props) and lofted diecast car bodies with liveries. Matchmaking filters by chosen map (`filterBy(["track"])`).
 **Consequences:** 4 maps with no new physics engine. No overpasses (2D walls can't cross); crest launches over hilltops are future work.
 
+## ADR-015 · Cosmetics whitelist, rooms built from a furniture kit
+**Context:** the owner asked for customisable cars (tall/short bodies, rims, stickers) and much more detailed, furnished maps (a kitchen with a washing machine, a dishwasher…).
+**Decision:** cosmetics are ids from a shared zod whitelist, stored per player, re-validated by API and game server, and visual only. Rooms are generated from a primitive furniture kit, merged per material, with thin-instanced clutter; AI-generated 3D (Higgsfield) is reserved for hero props and items once credits exist, because AI car meshes fuse wheels to the body.
+**Consequences:** no asset pipeline needed yet, everything is reproducible from code, and draw calls stay low (merged furniture, thin instances).
+
 ## ADR-014 · Render-loop-driven prediction with interpolation
 **Context:** the owner reported the car shaking while driving.
 **Decision:** run input and prediction from the render loop with a fixed-step accumulator; draw the local car between the last two predicted steps; low-pass the body-lean inputs.

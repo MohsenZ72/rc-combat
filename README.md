@@ -22,12 +22,14 @@ Open <http://localhost:5173>, pick a name, press **Find a race**. With dev setti
 
 **Controls:** W/S throttle and brake · A/D steer · **Space handbrake (drift)** · **Q jump** · F fire · E use item · **C look back**. A gamepad works too.
 
-**Maps:** Toy Track Classic (flat, fast), Living Room Rug (hills, book ramps), Kitchen Tiles (water spills, tray, ramps), Toy Track Canyon (12 m climbs, splash). Pick one or "Any map".
+**Maps (10, each a furnished room or garden):** Toy Track Classic, Living Room Rug, Kitchen Tiles, Toy Track Canyon, Bathroom Splash, Garden Path, Bedroom Dash, Garage Workshop, Library Loop, Sandbox Dunes. Pick one or "Any map".
+
+**Garage:** 8 body styles (low supercar to tall SUV), 8 rims × 6 colours, 4 tyre types, 16 paints × 4 finishes, 24 stickers, race number. Looks only: same hitbox and stats for everyone.
 
 ## Tests
 
 ```bash
-npm test                                   # 93 tests (game-core 66, game-server 11, API e2e 16; needs db:up)
+npm test                                   # 112 tests (game-core 84, game-server 11, API e2e 17; needs db:up)
 npm run typecheck
 npm run loadtest -- --clients 200 --seconds 60
 ```

@@ -4,10 +4,10 @@
 
 | Suite | Command | Count | Needs |
 |---|---|---|---|
-| Game core: simulation, physics, race, items, jump, handbrake, terrain, all 4 tracks, anti-cheat, replay, prediction, protocol | `npm test -w @rc/game-core` | 66 | — |
+| Game core: simulation, physics, race, items, jump, handbrake, terrain, all 10 tracks, anti-cheat, replay, prediction, protocol | `npm test -w @rc/game-core` | 84 | — |
 | Game server (`MatchSession`): lifecycle, kicks, reconnection, AFK, abandonment, verdicts, replay | `npm test -w @rc/game-server` | 11 | — |
-| API e2e (real Postgres) + payout planner | `npm test -w @rc/api` | 16 | `npm run db:up` |
-| Everything | `npm test` | 93 | Postgres |
+| API e2e (real Postgres, incl. cosmetics whitelist) + payout planner | `npm test -w @rc/api` | 17 | `npm run db:up` |
+| Everything | `npm test` | 112 | Postgres |
 | Type checks | `npm run typecheck` | — | `npm run build:packages` once |
 | Headless 10-bot race (balance + false-positive check) | `npx tsx --conditions=source packages/game-core/scripts/headless-race.ts [seed] [trackId]` | — | — |
 | Track geometry check | `npx tsx --conditions=source packages/game-core/scripts/track-check.ts [trackId]` | — | — |

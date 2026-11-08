@@ -11,7 +11,7 @@
 | Setting | Value |
 |---|---|
 | Players | up to 10 (bots fill casual lobbies) |
-| Tracks | 4 maps (below), 1.1–1.3 km, 16–18 checkpoints, width 16 m |
+| Tracks | 10 maps (below), 1.1–1.45 km, 16–18 checkpoints, width 16 m |
 | Laps | 5, or 4 on the longer hilly maps (winning race about 3.8–4.2 min) |
 | Countdown | 4 s |
 | Finish grace | 30 s after the first finisher |
@@ -48,7 +48,19 @@ All maps are toy-scale rooms. **There is no asphalt road anywhere**: the racing 
 | Toy Track Classic | orange plastic toy track on a wooden playroom floor | 5 | flat, one jump ramp |
 | Living Room Rug | round and over a patterned rug, toy-block walls | 5 | rolling hills up to 5 m (cushions under the rug), two book ramps |
 | Kitchen Tiles | ceramic floor tiles between table legs and the fridge | 4 | two water spills, a raised serving tray, two cutting-board ramps |
-| Toy Track Canyon | blue toy track on yellow stands over a carpet | 4 | climbs to 12 m and plunges down, a splash through a water tray, two ramps |
+| Toy Track Canyon | blue toy track on yellow stands in a kids' room | 4 | climbs to 12 m and plunges down, a splash through a water tray, two ramps |
+| Bathroom Splash | mosaic tiles round the bathtub, toilet and vanity | 5 | two overflow puddles, bath-mat bumps, a ramp |
+| Garden Path | dirt path through the lawn, stone edging, fence, house wall | 4 | grassy mounds to 8 m, two puddles, two ramps |
+| Bedroom Dash | pink carpet past the bed, wardrobe and desk | 5 | duvet hills to 4 m, two book ramps |
+| Garage Workshop | concrete under the workbench, tool chest, shelves | 5 | two oil slicks (same rules as water), plank ramps, raised pallet |
+| Library Loop | parquet between bookshelves, book-stack barriers | 5 | climbs to 10 m, two ramps |
+| Sandbox Dunes | playground sand, slide, swings, paddling pool | 4 | dunes to 6 m, a splash through the paddling pool, two ramps |
+
+Every map is a complete room or garden: walls with skirting and windows, doors, pictures and ceiling lights, furniture modelled in detail at toy scale (a kitchen has counters with sink, dishwasher, washing machine and dryer, stove and hood, fridge, microwave, table and chairs…), and thousands of small details on the floor (crumbs, Lego, pebbles, grass, shells, screws). Furniture never touches the racing line.
+
+## Garage (cosmetic only)
+
+Body styles: supercar, muscle, rally hatch, tall SUV, pickup, van, sedan, dune buggy. Rims: 5-spoke, 6-spoke, multi, mesh, dish, turbine, beadlock, wire, in 6 colours. Tyres: low profile, standard, off-road (lugged), whitewall. 16 paints with 4 finishes (gloss, metallic, matte, pearl), an accent colour, a race number, and 24 original stickers on 5 spots. **Every combination has the same hitbox, speed and grip**; the server whitelists every id.
 
 ### Terrain rules (server-simulated, identical in prediction)
 * **Slopes:** uphill costs speed, downhill adds it (0.6 × g × grade), always under the speed cap.
@@ -60,8 +72,8 @@ All maps are toy-scale rooms. **There is no asphalt road anywhere**: the racing 
 | Item | Effect | Counter |
 |---|---|---|
 | **Zapper** (always, F) | bolt 75 m/s, 8 dmg, slows 10%; 0.5 s cooldown; 10 ammo refilled each lap | jump, shield |
-| **Rocket** | homes on the car directly ahead (follows the track when out of sight), 35 dmg, 1 s stun, knockback | jump at the right moment, shield, walls break line of sight |
-| **Mine** | dropped behind, arms in 0.5 s, 25 dmg, 0.7 s stun; max 3 per player; lasts 30 s | jump over, steer around |
+| **Rocket** | homes on the car directly ahead (follows the track when out of sight), 35 dmg, 1 s stun, knockback. Looks: finned rocket with exhaust flame and smoke trail | jump at the right moment, shield, walls break line of sight |
+| **Mine** | a black bomb with a burning fuse and blinking light, dropped behind; arms in 0.5 s, 25 dmg, 0.7 s stun; max 3 per player; lasts 30 s | jump over, steer around |
 | **Shield** | 4 s immunity to damage and EMP | wait it out |
 | **Turbo** | 2.5 s of +30% top speed, +80% acceleration | knock them with a mine or bump |
 | **EMP** | car directly ahead within 160 m: 1.6 s at 60% throttle and 50% steering, 3 s item lock, cancels turbo; refused (item kept) without a target | shield |

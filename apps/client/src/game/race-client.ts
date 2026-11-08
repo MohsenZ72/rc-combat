@@ -1,9 +1,12 @@
 import { CarPredictor, lerpAngle, loadRapier, Track, TRACKS, WORKSHOP_CIRCUIT } from "@rc/game-core";
 import { CAR_FLAG, DEFAULT_CONFIG, ITEM_NAMES, mergeConfig, Phase, type CarSnapshot, type Cosmetics, type GameConfig, type GameEvent, type Snapshot } from "@rc/shared";
 import { Connection, type LobbyState, type ResultsMessage, type SeatInfo, type Welcome } from "../net/connection.js";
+import type { ParticleSystem, Texture } from "@babylonjs/core";
 import { CarView, CarViews } from "../render/cars.js";
+import { flareTexture, trail } from "../render/fx/particles.js";
 import { Effects } from "../render/effects.js";
 import { toWorld, World } from "../render/world.js";
+import { Vector3 } from "@babylonjs/core";
 import type { HudScreen } from "../ui/hud.js";
 import { Emitter } from "./emitter.js";
 import { InputController } from "./input.js";
@@ -39,6 +42,9 @@ export class RaceClient extends Emitter<ClientEvents> {
   private readonly world: World;
   private readonly cars: CarViews;
   private fx: Effects;
+  /** Per-car continuous effects: tyre smoke while drifting, spray in water. */
+  private carFx = new Map<number, { drift: ParticleSystem; spray: ParticleSystem }>();
+  private flareTex: Texture | null = null;
   /** Track segment hint per car for fast ground-height lookups. */
   private groundHints = new Map<number, number>();
   private readonly net = new Connection();
@@ -74,6 +80,7 @@ export class RaceClient extends Emitter<ClientEvents> {
     this.world.setTrack(this.track);
     this.cars = new CarViews(this.world, this.world.scene);
     this.fx = new Effects(this.world.scene, this.track);
+    this.fx.onExplosion = (x, z, power) => this.onExplosion(x, z, power);
     this.interp = new SnapshotInterpolator(this.config.net.tickRate, this.config.net.interpolationDelayMs);
     this.rapier = rapier;
     this.world.engine.runRenderLoop(() => {
@@ -180,6 +187,7 @@ export class RaceClient extends Emitter<ClientEvents> {
       this.world.setTrack(track);
       this.fx.dispose();
       this.fx = new Effects(this.world.scene, track);
+      this.fx.onExplosion = (x, z, power) => this.onExplosion(x, z, power);
       this.groundHints.clear();
     }
     this.seats = new Map(w.seats.map((s) => [s.slot, s]));
@@ -243,13 +251,28 @@ export class RaceClient extends Emitter<ClientEvents> {
         case "race_start":
           this.hud?.show("GO!", "is-go", 900);
           break;
-        case "hit":
+        case "hit": {
           if (!e.blocked) this.cars.get(e.victim)?.flash(performance.now());
+          const v = this.cars.get(e.victim)?.root.position;
+          if (v) {
+            if (e.source === "emp") this.fx.burst("electric", v.x, v.y + 1, v.z, 1.4);
+            else if (e.source === "bolt") this.fx.burst("sparks", v.x, v.y + 0.8, v.z, 1);
+            if (e.blocked) this.fx.burst("electric", v.x, v.y + 1, v.z, 0.8);
+          }
           if (e.source !== "bolt" && (e.victim === this.mySlot || e.attacker === this.mySlot)) {
             this.hud?.pushFeed(e.blocked ? `${name(e.victim)} blocked ${name(e.attacker)}'s ${e.source}` : `${name(e.attacker)} hit ${name(e.victim)} with ${e.source}`);
           }
           break;
-        case "wreck":
+        }
+        case "item_used": {
+          const p = this.cars.get(e.slot)?.root.position;
+          if (p && e.item === 6) this.fx.burst("heal", p.x, p.y + 1, p.z, 1.3);
+          break;
+        }
+        case "wreck": {
+          const p = this.cars.get(e.slot)?.root.position;
+          if (p) this.fx.explode(p.x, p.y + 0.8, p.z, 1.6);
+        }
           this.hud?.pushFeed(e.by === null ? `${name(e.slot)} wrecked` : `${name(e.by)} wrecked ${name(e.slot)}`);
           if (e.slot === this.mySlot) this.hud?.show("Wrecked!", "is-warn", 1500);
           break;
@@ -397,7 +420,9 @@ export class RaceClient extends Emitter<ClientEvents> {
       if (dh < -Math.PI) dh += Math.PI * 2;
       this.headings.set(c.slot, heading);
       const yawRate = dt > 0 ? dh / dt : 0;
-      view.update(x, y, this.groundHeight(c.slot, x, y) + z, heading, forwardSpeed, yawRate, c.flags, dt, now);
+      const ground = this.groundHeight(c.slot, x, y);
+      view.update(x, y, ground + z, heading, forwardSpeed, yawRate, c.flags, dt, now);
+      this.carEffects(c.slot, x, y, ground, z, heading, Math.abs(forwardSpeed), c.flags);
       mapDots.push({ x, y, color: this.seats.get(c.slot)?.color ?? "#ccc", me: c.slot === this.mySlot });
       this.placeTag(c.slot, x, y);
     }
@@ -417,6 +442,35 @@ export class RaceClient extends Emitter<ClientEvents> {
       this.lastMapDraw = now;
     }
     this.world.scene.render();
+  }
+
+  /** Tyre smoke while drifting and water spray in puddles, emitted from behind the rear wheels. */
+  private carEffects(slot: number, x: number, y: number, ground: number, z: number, heading: number, speed: number, flags: number): void {
+    let fx = this.carFx.get(slot);
+    if (!fx) {
+      this.flareTex ??= flareTexture(this.world.scene);
+      fx = { drift: trail(this.world.scene, this.flareTex, "drift"), spray: trail(this.world.scene, this.flareTex, "spray") };
+      fx.drift.start();
+      fx.spray.start();
+      this.carFx.set(slot, fx);
+    }
+    const rearX = x - Math.cos(heading) * 1.1;
+    const rearY = y - Math.sin(heading) * 1.1;
+    const pos = toWorld(rearX, rearY, ground + 0.2);
+    (fx.drift.emitter as Vector3).copyFrom(pos);
+    (fx.spray.emitter as Vector3).copyFrom(pos);
+    const onGround = z <= 0.01 && (flags & CAR_FLAG.WRECKED) === 0;
+    const drifting = (flags & CAR_FLAG.DRIFTING) !== 0;
+    fx.drift.emitRate = onGround && drifting && speed > 6 ? 70 : 0;
+    const inWater = onGround && this.track.waterAt(this.track.project(x, y, this.groundHints.get(slot) ?? -1).s);
+    fx.spray.emitRate = inWater && speed > 4 ? 40 + speed * 3 : 0;
+  }
+
+  private onExplosion(x: number, z: number, power: number): void {
+    const me = this.cars.get(this.mySlot)?.root.position;
+    if (!me) return;
+    const d = Math.hypot(me.x - x, me.z - z);
+    if (d < 30) this.world.shake(power * (1 - d / 30) * 0.9);
   }
 
   /** Ground height under a car (hills, ramps' base); cached segment hint keeps it cheap. */
@@ -462,6 +516,11 @@ export class RaceClient extends Emitter<ClientEvents> {
     this.interp = new SnapshotInterpolator(this.config.net.tickRate, this.config.net.interpolationDelayMs);
     this.cars.retain(new Set());
     this.fx.sync([], performance.now());
+    for (const fx of this.carFx.values()) {
+      fx.drift.dispose();
+      fx.spray.dispose();
+    }
+    this.carFx.clear();
     void this.latest;
   }
 }
