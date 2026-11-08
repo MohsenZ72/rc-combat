@@ -6,3 +6,4 @@ dist/
 coverage/
 apps/game-server/replays/
 loadtest-report*.json
+.cache/

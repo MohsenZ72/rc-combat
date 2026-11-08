@@ -19,7 +19,7 @@
     "db:migrate": "npm run migrate -w @rc/api",
     "dev": "npm run build:packages && concurrently -k -n api,game,client -c blue,magenta,green \"npm run dev -w @rc/api\" \"npm run dev -w @rc/game-server\" \"npm run dev -w @rc/client\"",
     "loadtest": "npm run loadtest -w @rc/game-server --",
-    "assets": "python3 scripts/fetch-assets.py"
+    "assets": "bash scripts/assets.sh"
   },
   "devDependencies": {
     "@gltf-transform/cli": "^4.5.1",

@@ -17,7 +17,8 @@ Per 3D model: a photo-scanned prop as one optimised .glb (quantised
 geometry, WebP textures <= 1024 px) via gltf-transform, in models/.
 
 Re-run any time; existing files are kept unless --force is given.
-Needs: python3, Pillow, numpy, cwebp (brew install webp), npm install (gltf-transform).
+Run via `npm run assets` (scripts/assets.sh makes a virtualenv with Pillow and numpy).
+Also needs cwebp (brew install webp) and npm install (gltf-transform).
 """
 import io, json, os, subprocess, sys, tempfile
 import numpy as np
