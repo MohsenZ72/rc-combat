@@ -286,3 +286,17 @@ export function decodeSnapshot(payload: unknown): DecodeResult<Snapshot> {
   }
   return { ok: true, value: { phase, tick, raceTick, ack, cars, projectiles, boxes } };
 }
+
+/** Byte offset of the u16 ack field inside an encoded snapshot. */
+export const SNAPSHOT_ACK_OFFSET = 10;
+
+/**
+ * Copies an encoded snapshot with a per-recipient ack. Lets the server encode
+ * a tick once and only patch two bytes per client.
+ */
+export function withSnapshotAck(encoded: Uint8Array, ack: number): Uint8Array {
+  const copy = new Uint8Array(encoded);
+  copy[SNAPSHOT_ACK_OFFSET] = ack & 0xff;
+  copy[SNAPSHOT_ACK_OFFSET + 1] = (ack >>> 8) & 0xff;
+  return copy;
+}
