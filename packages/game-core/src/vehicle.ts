@@ -20,6 +20,15 @@ export interface MovementState {
   jumpCooldownTicks: number;
 }
 
+/** Ground under the car this tick (from the track). */
+export interface Surface {
+  /** dz/ds along the car's heading: positive = uphill. */
+  slope: number;
+  water: boolean;
+}
+
+export const FLAT: Surface = { slope: 0, water: false };
+
 export interface MovementLimits {
   maxSpeed: number;
   acceleration: number;
@@ -69,7 +78,14 @@ export function absoluteSpeedCeiling(config: GameConfig): number {
  * `prevButtons` makes jumping edge-triggered: holding the key does not
  * bunny-hop. Take-off needs the car on the floor and the cooldown expired.
  */
-export function integrateMovement(car: MovementState, buttons: number, dt: number, config: GameConfig, prevButtons = 0): boolean {
+export function integrateMovement(
+  car: MovementState,
+  buttons: number,
+  dt: number,
+  config: GameConfig,
+  prevButtons = 0,
+  surface: Surface = FLAT,
+): boolean {
   const c = config.car;
   const controlsLocked = car.stunTicks > 0 || car.wreckTicks > 0;
   const autopilot = car.finished;
@@ -93,15 +109,23 @@ export function integrateMovement(car: MovementState, buttons: number, dt: numbe
   let vF = car.vx * fx + car.vy * fy;
   let vL = car.vx * -fy + car.vy * fx;
 
-  car.drifting = grounded && !controlsLocked && (buttons & BTN.DRIFT) !== 0 && steer !== 0 && vF > 8;
+  // Handbrake locks the rear wheels: the car slides. Releasing it while holding throttle and
+  // steering keeps a power slide going until the sideways speed is gone.
+  const handbrake = grounded && !controlsLocked && !autopilot && (buttons & BTN.HANDBRAKE) !== 0;
+  const holdingSlide = car.drifting && grounded && throttleBtn && steer !== 0 && Math.abs(vL) > 1.5;
+  car.drifting = (handbrake && Math.hypot(vF, vL) > 6) || holdingSlide;
   const limits = movementLimits(car, config);
   const empActive = car.empTicks > 0;
   const throttleCap = empActive ? config.items.emp.throttleCap : 1;
-  const forwardCap = limits.maxSpeed * throttleCap;
+  const forwardCap = limits.maxSpeed * throttleCap * (surface.water ? c.waterSpeedMultiplier : 1);
 
   if (car.wreckTicks > 0) {
     vF = 0;
     vL = 0;
+  } else if (handbrake) {
+    // Rear lock: steady, gentle deceleration, never into reverse; throttle can't fight it.
+    const decel = c.handbrakeDeceleration * dt;
+    vF = vF > 0 ? Math.max(0, vF - decel) : Math.min(0, vF + decel);
   } else if (throttleBtn && !brakeBtn) {
     if (vF < 0) vF = Math.min(0, vF + c.brakeDeceleration * dt);
     else if (vF < forwardCap) vF = Math.min(forwardCap, vF + limits.acceleration * dt);
@@ -113,7 +137,13 @@ export function integrateMovement(car: MovementState, buttons: number, dt: numbe
     vF = vF > 0 ? Math.max(0, vF - decel) : Math.min(0, vF + decel);
   }
 
-  // Bleed off speed above the current ceiling smoothly (turbo ending, drifting).
+  // Slopes: uphill costs speed, downhill adds it (still under every cap below). Water drags.
+  if (grounded && car.wreckTicks === 0) {
+    vF -= c.gravity * c.slopeFactor * surface.slope * dt;
+    if (surface.water && vF > 0) vF = Math.max(0, vF - c.waterDrag * dt);
+  }
+
+  // Bleed off speed above the current ceiling smoothly (turbo ending, drifting, water).
   if (vF > forwardCap) vF = Math.max(forwardCap, vF - OVERSPEED_DECAY * dt);
 
   // Steering: needs some speed, loses authority at the top end, flips in reverse.
@@ -140,7 +170,10 @@ export function integrateMovement(car: MovementState, buttons: number, dt: numbe
   vF = vx * fx + vy * fy;
   vL = vx * -fy + vy * fx;
   // In the air the tyres do not grip, so the car keeps sliding along its old line.
-  if (grounded) vL *= Math.exp(-(car.drifting ? c.driftGrip : c.grip) * dt);
+  if (grounded) {
+    const grip = (handbrake ? c.handbrakeGrip : car.drifting ? c.driftGrip : c.grip) * (surface.water ? c.waterGripMultiplier : 1);
+    vL *= Math.exp(-grip * dt);
+  }
   vx = fx * vF - fy * vL;
   vy = fy * vF + fx * vL;
 

@@ -49,6 +49,18 @@ export interface CarConfig {
   landingSpeedKeep: number;
   /** Height below which a car is hit by ground-level shots and collides with other cars. */
   bodyHeight: number;
+  /** Handbrake: rear lock deceleration (much gentler than the brake) and the very low grip it causes. */
+  handbrakeDeceleration: number;
+  handbrakeGrip: number;
+  /** Fraction of gravity felt along a slope (uphill slows, downhill speeds up within the cap). */
+  slopeFactor: number;
+  /** Shallow water: top speed multiplier, grip multiplier and extra drag (m/s²). */
+  waterSpeedMultiplier: number;
+  waterGripMultiplier: number;
+  waterDrag: number;
+  /** Take-off speed from a ramp lip and the minimum forward speed to launch. */
+  rampVelocity: number;
+  rampMinSpeed: number;
 }
 
 export interface ItemConfig {
@@ -172,12 +184,20 @@ export const DEFAULT_CONFIG: GameConfig = {
     wallRestitution: 0.25,
     carRestitution: 0.6,
     maxHealth: 100,
-    jumpVelocity: 7.5,
+    jumpVelocity: 9.6,
     gravity: 22,
-    jumpCooldown: 1.1,
+    jumpCooldown: 1.3,
     airSteer: 0.3,
     landingSpeedKeep: 0.95,
     bodyHeight: 1.0,
+    handbrakeDeceleration: 9,
+    handbrakeGrip: 1.4,
+    slopeFactor: 0.6,
+    waterSpeedMultiplier: 0.7,
+    waterGripMultiplier: 0.55,
+    waterDrag: 4,
+    rampVelocity: 7,
+    rampMinSpeed: 12,
   },
   items: {
     rocket: { speed: 46, turnRate: 3.2, lifetime: 4, damage: 35, stun: 1.0, hitRadius: 0.9, armTime: 0.15 },

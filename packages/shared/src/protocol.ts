@@ -37,7 +37,8 @@ export const BTN = {
   BRAKE: 1 << 1,
   STEER_LEFT: 1 << 2,
   STEER_RIGHT: 1 << 3,
-  DRIFT: 1 << 4,
+  /** Handbrake: locks the rear, the car slides; hold throttle + steer to keep drifting. */
+  HANDBRAKE: 1 << 4,
   USE_ITEM: 1 << 5,
   FIRE: 1 << 6,
   JUMP: 1 << 7,

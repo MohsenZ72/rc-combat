@@ -49,6 +49,7 @@ export class RaceClient extends Emitter<ClientEvents> {
   private headings = new Map<number, number>();
   private lastMapDraw = 0;
   private cameraSnapped = false;
+  private lookingBack = false;
   private readonly reportedErrors = new Set<string>();
 
   private constructor(canvas: HTMLCanvasElement, rapier: Awaited<ReturnType<typeof loadRapier>>) {
@@ -306,7 +307,10 @@ export class RaceClient extends Emitter<ClientEvents> {
         heading = p.heading;
         vx = p.vx;
         vy = p.vy;
-        this.world.follow(x, y, heading, Math.hypot(vx, vy), dt, !this.cameraSnapped);
+        // C (or R3) flips the chase camera to look behind; snap on toggle so it doesn't swing through the car.
+        const lookBack = this.input.lookingBack();
+        this.world.follow(x, y, heading + (lookBack ? Math.PI : 0), Math.hypot(vx, vy), dt, !this.cameraSnapped || lookBack !== this.lookingBack);
+        this.lookingBack = lookBack;
         this.cameraSnapped = true;
       }
       const forwardSpeed = vx * Math.cos(heading) + vy * Math.sin(heading);

@@ -75,7 +75,8 @@ export class BotDriver {
     const cornerSpeed = 30 - bend * (18 + 10 * (1 - this.skill));
     if (Math.abs(diff) > 1.1 && speed > 10) buttons |= BTN.BRAKE;
     else if (speed < cornerSpeed || speed < 12) buttons |= BTN.ACCELERATE;
-    if (bend > 0.6 && speed > 18 && Math.abs(diff) > 0.25 && this.skill > 0.5) buttons |= BTN.DRIFT;
+    // Short handbrake flicks to rotate into hairpins (holding it would just slow the bot down).
+    if (bend > 0.9 && speed > 20 && Math.abs(diff) > 0.35 && this.skill > 0.5 && this.rng.next() < 0.3) buttons |= BTN.HANDBRAKE;
 
     buttons |= this.combat(view, car, speed, bend);
     if (this.shouldJump(view, car)) buttons |= BTN.JUMP;
