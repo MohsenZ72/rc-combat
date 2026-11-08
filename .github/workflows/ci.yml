@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: rc
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: rc_combat
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rc" --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://rc:ci_only_password@localhost:5433/rc_combat
+      # CI-only throwaway values; real secrets never live in the repo.
+      JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-else-0000
+      INTERNAL_API_KEY: ci-only-internal-key-000000000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - run: npm run typecheck
+      - run: npm test
+      - name: Headless race (no false positives, replay verifies)
+        run: |
+          for seed in 1 7 42; do
+            out=$(npx tsx --conditions=source packages/game-core/scripts/headless-race.ts $seed)
+            echo "$out" | grep -E "^ticks|^anomalies"
+            echo "$out" | grep -q "^anomalies 0 " || { echo "anomalies detected for seed $seed"; exit 1; }
+            echo "$out" | grep -q "ok: true" || { echo "replay verification failed for seed $seed"; exit 1; }
+          done
+      - run: npm run build -w @rc/client

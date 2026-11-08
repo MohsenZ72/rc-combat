@@ -72,14 +72,16 @@ class CarView {
       // Rounded rubber tyre: a smooth torus (48 segments) around the axle. Babylon builds
       // tori/cylinders around Y, so bake a 90° X rotation to put the axle on Z.
       const tyre = MeshBuilder.CreateTorus("tyre", { diameter: WHEEL_RADIUS * 2 - TYRE_THICKNESS, thickness: TYRE_THICKNESS, tessellation: 48 }, scene);
+      // Scaling applies before rotation: widen along the torus axis (local Y, which becomes the
+      // axle after the 90° turn). Scaling Z here would squash the ring into an ellipse.
+      tyre.scaling.y = 1.7; // wide RC buggy tread
       tyre.rotation.x = Math.PI / 2;
-      tyre.scaling.z = 1.7; // wide RC buggy tread
       tyre.bakeCurrentTransformIntoVertices();
       tyre.material = tyreMat;
       tyre.parent = pivot;
       const side = z > 0 ? 1 : -1;
       // Rim disc fills the tyre, then five spokes and a hub cap on the outer face.
-      const rim = MeshBuilder.CreateCylinder("rim", { diameter: (WHEEL_RADIUS - TYRE_THICKNESS) * 2 + 0.08, height: 0.2, tessellation: 40 }, scene);
+      const rim = MeshBuilder.CreateCylinder("rim", { diameter: (WHEEL_RADIUS - TYRE_THICKNESS) * 2 + 0.08, height: 0.2, tessellation: 48 }, scene);
       rim.rotation.x = Math.PI / 2;
       rim.bakeCurrentTransformIntoVertices();
       rim.material = rimDarkMat;
@@ -92,7 +94,7 @@ class CarView {
         spoke.material = rimMat;
         spoke.parent = tyre;
       }
-      const hub = MeshBuilder.CreateCylinder("hub", { diameter: 0.14, height: 0.06, tessellation: 20 }, scene);
+      const hub = MeshBuilder.CreateCylinder("hub", { diameter: 0.14, height: 0.06, tessellation: 32 }, scene);
       hub.rotation.x = Math.PI / 2;
       hub.position.z = side * 0.13;
       hub.material = mat(scene, `hub${slot}`, color, { specular: 0.8 });

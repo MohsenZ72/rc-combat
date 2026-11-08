@@ -46,7 +46,7 @@ projectile (16 B): u16 id · u8 kind · u8 owner · f32 x,y,heading
 
 The server encodes each tick **once** and patches only the 2-byte `ack` per recipient (`withSnapshotAck`).
 
-Bandwidth at 30 Hz with 10 cars is about 13 KB/s down per client and under 1 KB/s up. Measured numbers are in [testing.md](../testing.md).
+Measured at 30 Hz with 10 cars: about 12 KB/s down and under 0.1 KB/s up per player (see [testing.md](../testing.md)).
 
 ## Client prediction and reconciliation (local car)
 
