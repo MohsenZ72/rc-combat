@@ -15,5 +15,6 @@
 | [Testing](testing.md) | suites, anti-cheat test map, load test results, bottlenecks |
 | [Runbook](runbook.md) | run, configure, operate, troubleshoot |
 | [Roadmap](roadmap.md) | known limitations and next steps |
+| [Mobile release](mobile-release.md) | Android APK/AAB on Cafe Bazaar: plan, gaps, owner blockers |
 
 AI agents: start with [`AGENTS.md`](../AGENTS.md) and the project skills in [`.claude/skills/`](../.claude/skills/).

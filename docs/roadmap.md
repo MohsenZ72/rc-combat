@@ -2,7 +2,9 @@
 
 ## Known limitations (honest list)
 
-* **Art is procedural geometry.** Lofted diecast car bodies and primitive props; no audio, no particles beyond pooled spheres, no post-processing.
+* **Cars are procedural.** Rooms use photo-scanned CC0 materials and props with PBR/HDRI lighting (ADR-016), but car bodies are lofted geometry, and a few props (washer, dishwasher, fridge, bathtub, toilet, item boxes) are still primitives. **No audio** yet.
+* **Keyboard and gamepad only.** No touch controls, so phones can open the public build but cannot drive (see [mobile-release.md](mobile-release.md)).
+* **Public build is offline only.** https://mohsenz72.github.io/rc-combat/ races 9 bots in the browser (ADR-018). Online multiplayer for the public needs a hosted API, game server and Postgres.
 * **Four maps on a 2D physics plane with a height profile.** No overpasses or loops, no banking, no launch off hill crests (only ramps and jumps).
 * **Prediction ignores remote-car motion.** Other cars are static obstacles at their last snapshot, so close side-by-side racing shows small corrections. Remote cars are drawn 70 ms in the past.
 * **Rocket/bolt hits are judged on the server's present**, with no lag compensation (rewind). High-ping shooters must lead their target more. Fine for 30 Hz WebSockets at normal pings; add rewind later if needed.
@@ -19,12 +21,17 @@
 ## Next steps (priority order)
 
 ### 1. Gameplay polish
-* Real models. Props from free CC0 kits (Kenney furniture/kitchen/toy kits, Quaternius) as glTF with Draco/KTX2. Hero diecast cars from reference photos via image-to-3D (the Higgsfield `generate_3d` MCP is already connected; Meshy/Tripo are paid alternatives) or a Blender MCP. All lazy-loaded.
-* Tyre smoke while drifting, water splashes, sparks on wall scrapes, a rocket trail, explosions with particles.
+* Replace the remaining primitive props (washer, dishwasher, fridge, bathtub, toilet, item boxes) with scanned CC0 models. Higgsfield `generate_3d` for hero props once credits exist (balance ~0.06 on 2026-11-10; buying is the owner's decision).
 * Audio: engine pitch by speed, impacts, item cues, countdown beeps.
 * Camera shake and FOV kick on turbo and hits; drift boost (mini-turbo after a long drift).
 * Ramps and jump pads (needs 3D or a height field on the track spline).
 * Spectator mode after finishing; post-race replay viewer using `ReplayRecorder` data.
+
+### 1b. Mobile / Cafe Bazaar release
+* Touch controls, mobile performance pass, Capacitor wrap to a signed AAB/APK, Persian store listing. Full plan and owner blockers in [mobile-release.md](mobile-release.md).
+
+### 1c. Public online multiplayer
+* Host the API, game server and Postgres (cheapest reachable VPS), point the public build at it, keep the offline mode as fallback.
 
 ### 2. Networking optimisation
 * Quantise positions (int16 at 2 cm) and headings (u16): about −35% bandwidth.
